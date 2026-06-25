@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Base bright vibrant gradient -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="135"
+                android:startColor="#00b09b"
+                android:endColor="#96c93d"
+                android:type="linear" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <!-- Bubble top right -->
+    <item
+        android:bottom="80dp"
+        android:left="180dp"
+        android:right="-20dp"
+        android:top="-30dp">
+        <shape android:shape="oval">
+            <solid android:color="#33FFFFFF" />
+        </shape>
+    </item>
+    <!-- Bubble bottom left -->
+    <item
+        android:bottom="-40dp"
+        android:left="-30dp"
+        android:right="160dp"
+        android:top="100dp">
+        <shape android:shape="oval">
+            <solid android:color="#1AFFFFFF" />
+        </shape>
+    </item>
+    <!-- Small bubble center -->
+    <item
+        android:bottom="60dp"
+        android:left="80dp"
+        android:right="100dp"
+        android:top="40dp">
+        <shape android:shape="oval">
+            <solid android:color="#11FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

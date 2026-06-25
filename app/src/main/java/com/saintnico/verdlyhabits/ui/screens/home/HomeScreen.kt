@@ -1,0 +1,1357 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
+package com.saintnico.verdlyhabits.ui.screens.home
+
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.saintnico.verdlyhabits.R
+import com.saintnico.verdlyhabits.audio.SoundEngine
+import com.saintnico.verdlyhabits.audio.rememberAppHaptics
+import com.saintnico.verdlyhabits.audio.rememberAppSound
+import com.saintnico.verdlyhabits.data.remote.storage.StorageRepository
+import com.saintnico.verdlyhabits.domain.HabitCategory
+import com.saintnico.verdlyhabits.domain.HabitScheduling
+import com.saintnico.verdlyhabits.engine.MotivationalEngine
+import com.saintnico.verdlyhabits.ui.components.BurstIntensity
+import com.saintnico.verdlyhabits.ui.components.CelebrationKonfetti
+import com.saintnico.verdlyhabits.ui.components.DashboardProgressRing
+import com.saintnico.verdlyhabits.ui.components.HabitSwipeCard
+import com.saintnico.verdlyhabits.ui.components.MiniHeatmapStrip
+import com.saintnico.verdlyhabits.ui.components.MomentumBar
+import com.saintnico.verdlyhabits.ui.components.PremiumInsightCard
+import com.saintnico.verdlyhabits.ui.components.StreakFlame
+import com.saintnico.verdlyhabits.ui.components.WavingHandIcon
+import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
+import com.saintnico.verdlyhabits.ui.components.notifications.NotificationBellButton
+import com.saintnico.verdlyhabits.ui.components.referral.ReferralPromoBanner
+import com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakState
+import com.saintnico.verdlyhabits.ui.components.social.DuoStreakCard
+import com.saintnico.verdlyhabits.ui.viewmodel.ReferralUiState
+import com.saintnico.verdlyhabits.monetization.PaywallTrigger
+import com.saintnico.verdlyhabits.ui.components.share.shareStreakCardWithImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalTime
+
+private val smartInsights = listOf(
+    "Habits completed before 9 AM have a 90% streak survival rate.",
+    "Consistent people don't wait for motivation. They built systems. Like this one.",
+    "Every completion today is a vote for the person you're becoming.",
+    "Small consistent actions outlast intense short bursts. Every. Single. Time.",
+    "You complete habits more on days you also log your mood.",
+    "66 days to lock in a habit for life — real science, not a myth.",
+    "Weekend habits are the hardest to keep. Keep going anyway.",
+    "Your morning habits protect your evening ones. Win the AM.",
+    "Focus sessions average 4× the completion rate of regular habit checks.",
+)
+
+@Composable
+fun HomeScreen(
+    viewModel: HabitViewModel,
+    userStatsViewModel: UserStatsViewModel? = null,
+    challengeViewModel: com.saintnico.verdlyhabits.ui.viewmodel.ChallengeViewModel? = null,
+    billingViewModel: BillingViewModel,
+    hasFullAccess: Boolean,
+    onRequestPaywall: (PaywallTrigger) -> Unit,
+    userName: String = "there",
+    userUsername: String = "",
+    onNavigateToAddHabit: () -> Unit,
+    onNavigateToEditHabit: (String) -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToFocus: ((String?) -> Unit)? = null,
+    onNavigateToStats: (() -> Unit)? = null,
+    onNavigateToChallenge: ((String) -> Unit)? = null,
+    onShowNotification: ((String, Boolean, androidx.compose.ui.graphics.vector.ImageVector?) -> Unit)? = null,
+    goalsViewModel: com.saintnico.verdlyhabits.ui.viewmodel.GoalsViewModel? = null,
+    onNavigateToGoals: (() -> Unit)? = null,
+    onNavigateToEditProfile: (() -> Unit)? = null,
+    userPhotoUri: String? = null,
+    userMotto: String = "",
+    userBio: String = "",
+    userFavoritePlant: String = "",
+    referralState: ReferralUiState = ReferralUiState(),
+    onOpenReferral: () -> Unit = {},
+    onDismissReferralBanner: () -> Unit = {},
+    duoState: DuoStreakState? = null,
+    onAcceptDuoInvite: (String) -> Unit = {},
+    onDeclineDuoInvite: (String) -> Unit = {},
+    notificationBadgeCount: Int = 0,
+    onOpenNotifications: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val sound = rememberAppSound()
+    val haptics = rememberAppHaptics()
+
+    // User prefs — drive whether SoundEngine/HapticsEngine fire feedback.
+    val themePref = remember { com.saintnico.verdlyhabits.preferences.ThemePreference(context) }
+    val store = remember { com.saintnico.verdlyhabits.data.local.AppDataStore(context) }
+    val hapticsEnabled by themePref.isVibrationEnabled.collectAsState(initial = true)
+    val soundEnabled by store.soundEnabled.collectAsState(initial = true)
+    val isPro by billingViewModel.isPro.collectAsState()
+    val dismissedPillDay by store.trialPillDismissedDay.collectAsState(initial = null)
+    val todayIso = java.time.LocalDate.now().toString()
+    val showTrialPill = billingViewModel.isInFreeTrial() && !isPro && dismissedPillDay != todayIso
+
+    // ── Source of truth ────────────────────────────────────────────────────
+    val habits = viewModel.habits
+    val visible = habits.filter { !it.isArchived }
+    val todayDate = LocalDate.now()
+    val visibleScheduledToday = visible.filter {
+        HabitScheduling.isDueOn(it.frequency, it.customDaysMask, todayDate)
+    }
+    val active = visibleScheduledToday.filter { !it.isCompleted && !it.isPaused }
+    val completed = visibleScheduledToday.filter { it.isCompleted }
+    val totalStreak = visible.sumOf { it.streak }
+    val completionRate =
+        if (visibleScheduledToday.isEmpty()) 0f
+        else completed.size.toFloat() / visibleScheduledToday.size
+    val pinned: HabitItem? = run {
+        val fav = visible.firstOrNull { it.isFavoriteFocus }
+        if (fav != null && !fav.isCompleted && !fav.isPaused &&
+            HabitScheduling.isDueOn(fav.frequency, fav.customDaysMask, todayDate)
+        ) {
+            fav
+        } else {
+            highestPriority(active)
+        }
+    }
+
+    val statsState = userStatsViewModel?.state?.collectAsState()
+    val xpToday = statsState?.value?.xpEarnedToday ?: 0
+    val shieldCount = statsState?.value?.streakShields ?: 0
+
+    // ── Time / greeting ────────────────────────────────────────────────────
+    val now = remember { LocalTime.now() }
+    val timeGreeting = remember(now) {
+        when (now.hour) {
+            in 5..11  -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            in 17..21 -> "Good evening"
+            else      -> "Late night"
+        }
+    }
+    val moodCopy = remember(visible, completionRate, totalStreak) {
+        when {
+            visible.isEmpty()           -> "Plant your first habit to begin."
+            completionRate >= 1f        -> "Day completed. You're untouchable."
+            totalStreak >= 7            -> "Your streak is alive. Keep it that way."
+            now.hour in 17..21          -> "Evening check-in time."
+            now.hour in 5..11           -> "Set the tone of the day."
+            else                        -> "One habit at a time."
+        }
+    }
+    val displayName = if (userUsername.isNotBlank()) userUsername
+                      else (if (userName.isBlank()) "there" else userName.split(" ").first())
+
+    // ── Local UI state ─────────────────────────────────────────────────────
+    var selectedHabitForActions by remember { mutableStateOf<HabitItem?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var insightDismissed by remember { mutableStateOf(false) }
+    val dailyInsight = remember { smartInsights.random() }
+
+    var showTimePicker by remember { mutableStateOf(false) }
+    var selectedHabitForTimer by remember { mutableStateOf<HabitItem?>(null) }
+    val timePickerState = rememberTimePickerState()
+
+    var xpPopupText by remember { mutableStateOf("") }
+    var showXpPopup by remember { mutableStateOf(false) }
+    val xpAlpha by animateFloatAsState(if (showXpPopup) 1f else 0f, tween(300), label = "xp_alpha")
+    val xpOffset by animateFloatAsState(if (showXpPopup) -80f else 0f, tween(800), label = "xp_offset")
+
+    var konfettiTrigger by remember { mutableStateOf<Long?>(null) }
+    var hugeKonfettiTrigger by remember { mutableStateOf<Long?>(null) }
+    var pendingStreakMilestone by remember { mutableStateOf<HabitItem?>(null) }
+    var categoryFilter by remember { mutableStateOf<HabitCategory?>(null) }
+
+    // ── Photo / challenge proof (preserved from original) ─────────────────
+    var uriToSave by remember { mutableStateOf<android.net.Uri?>(null) }
+    var habitPendingPhoto by remember { mutableStateOf<HabitItem?>(null) }
+    var showSharePromptFor by remember { mutableStateOf<HabitItem?>(null) }
+    var sharedPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var activeChallengeIdForProof by remember { mutableStateOf<String?>(null) }
+    val storageRepository = remember { StorageRepository() }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        val uri = uriToSave
+        if (success && habitPendingPhoto != null && uri != null) {
+            val habit = habitPendingPhoto!!
+            val challengeId = activeChallengeIdForProof
+            scope.launch {
+                onShowNotification?.invoke("Uploading proof to the cloud…", false, Icons.Rounded.CloudUpload)
+                val downloadUrl = storageRepository.uploadProofPhoto(context, habit.id, uri, challengeId)
+                try {
+                    context.contentResolver.delete(uri, null, null)
+                    val file = java.io.File(uri.path ?: "")
+                    if (file.exists()) file.delete()
+                } catch (_: Exception) {}
+
+                if (downloadUrl != null) {
+                    viewModel.completeHabitWithProof(habit, downloadUrl)
+                    if (challengeId != null) {
+                        val todayStr = java.time.LocalDate.now()
+                            .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                        val locClient = LocationServices.getFusedLocationProviderClient(context)
+                        try {
+                            if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                                == PackageManager.PERMISSION_GRANTED) {
+                                locClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                                    .addOnSuccessListener { location ->
+                                        challengeViewModel?.markCompletion(
+                                            challengeId, todayStr, downloadUrl,
+                                            location?.latitude, location?.longitude
+                                        )
+                                    }
+                            } else {
+                                challengeViewModel?.markCompletion(challengeId, todayStr, downloadUrl)
+                            }
+                        } catch (_: Exception) {
+                            challengeViewModel?.markCompletion(challengeId, todayStr, downloadUrl)
+                        }
+                    }
+
+                    if (!habit.isCompleted) {
+                        val xp = habit.difficulty.xp + minOf(habit.streak * 2, 30)
+                        registerCompletionFx(
+                            scope = scope,
+                            sound = sound, haptics = haptics,
+                            soundEnabled = soundEnabled, hapticsEnabled = hapticsEnabled,
+                            streak = habit.streak + 1,
+                            onXpFlash = { xpPopupText = "+$xp XP"; showXpPopup = true },
+                            onClearFlash = { showXpPopup = false },
+                            onKonfettiNormal = { konfettiTrigger = System.currentTimeMillis() },
+                            onKonfettiHuge = { hugeKonfettiTrigger = System.currentTimeMillis() }
+                        )
+                        onShowNotification?.invoke("${habit.title} verified · +$xp XP", false, Icons.Rounded.Verified)
+                        userStatsViewModel?.onHabitCompleted(
+                            streak = habit.streak + 1,
+                            isPerfectDay = active.size == 1,
+                            isFirstCompletion = habit.completedDates.isEmpty(),
+                            habits = viewModel.habits.toList(),
+                            difficulty = habit.difficulty
+                        )
+                        val ns = habit.streak + 1
+                        if (!hasFullAccess && ns == 7) onRequestPaywall(PaywallTrigger.SevenDayStreak)
+                        else if (hasFullAccess && ns == 7) pendingStreakMilestone = habit
+                        sharedPhotoUri = uri
+                        showSharePromptFor = habit
+                    }
+                } else {
+                    onShowNotification?.invoke("Upload failed. Streak not verified.", true, Icons.Rounded.Error)
+                }
+            }
+        }
+        habitPendingPhoto = null
+        uriToSave = null
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted && habitPendingPhoto != null) {
+            val habit = habitPendingPhoto!!
+            val imageFile = java.io.File(context.cacheDir, "images").also { it.mkdirs() }
+            val file = java.io.File(imageFile, "${habit.id}_${System.currentTimeMillis()}.jpg")
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", file
+            )
+            uriToSave = uri
+            try { cameraLauncher.launch(uri) }
+            catch (_: SecurityException) {
+                onShowNotification?.invoke("Camera permission was denied.", true, Icons.Rounded.CameraAlt)
+            }
+        } else if (!isGranted) {
+            onShowNotification?.invoke("Camera permission is required to verify habits.", true, Icons.Rounded.CameraAlt)
+        }
+    }
+
+    val handleCompletion: (HabitItem) -> Unit = { habit ->
+        val activeChallenge = challengeViewModel?.getActiveChallengeForHabit(habit.title)
+        val isChallengeHabit = activeChallenge != null
+
+        if (isChallengeHabit && !habit.isCompleted) {
+            val granted = ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                habitPendingPhoto = habit
+                activeChallengeIdForProof = activeChallenge?.id
+                permissionLauncher.launch(android.Manifest.permission.CAMERA)
+            } else {
+                val imageFile = java.io.File(context.cacheDir, "images").also { it.mkdirs() }
+                val file = java.io.File(imageFile, "${habit.id}_${System.currentTimeMillis()}.jpg")
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context, "${context.packageName}.fileprovider", file
+                )
+                uriToSave = uri
+                habitPendingPhoto = habit
+                activeChallengeIdForProof = activeChallenge?.id
+                try { cameraLauncher.launch(uri) }
+                catch (_: SecurityException) {
+                    onShowNotification?.invoke("Camera permission is required.", true, Icons.Rounded.CameraAlt)
+                }
+            }
+        } else {
+            if (!habit.isCompleted) {
+                viewModel.toggleHabitCompletion(habit.id)
+                val newStreak = habit.streak + 1
+                val xp = habit.difficulty.xp + minOf(habit.streak * 2, 30)
+                registerCompletionFx(
+                    scope = scope,
+                    sound = sound, haptics = haptics,
+                    soundEnabled = soundEnabled, hapticsEnabled = hapticsEnabled,
+                    streak = newStreak,
+                    onXpFlash = { xpPopupText = "+$xp XP"; showXpPopup = true },
+                    onClearFlash = { showXpPopup = false },
+                    onKonfettiNormal = { konfettiTrigger = System.currentTimeMillis() },
+                    onKonfettiHuge = { hugeKonfettiTrigger = System.currentTimeMillis() }
+                )
+                onShowNotification?.invoke("${habit.title} · +$xp XP", false, Icons.Rounded.CheckCircle)
+
+                userStatsViewModel?.onHabitCompleted(
+                    streak = newStreak,
+                    isPerfectDay = active.size == 1,
+                    isFirstCompletion = habit.completedDates.isEmpty(),
+                    habits = viewModel.habits.toList(),
+                    difficulty = habit.difficulty
+                )
+                if (!hasFullAccess && newStreak == 7) onRequestPaywall(PaywallTrigger.SevenDayStreak)
+                else if (hasFullAccess && newStreak == 7) pendingStreakMilestone = habit
+
+                // Habit stacking — fire follow-up notifications for chained habits
+                val chained = viewModel.stackedAfter(habit.id)
+                if (chained.isNotEmpty()) {
+                    onShowNotification?.invoke(
+                        "Stacked next: ${chained.first().title}",
+                        false,
+                        Icons.Rounded.Link
+                    )
+                }
+            } else {
+                viewModel.toggleHabitCompletion(habit.id)
+            }
+        }
+    }
+
+    val onSwipeSkip: (HabitItem) -> Unit = { habit ->
+        haptics.tick(enabled = hapticsEnabled)
+        onShowNotification?.invoke("${habit.title} skipped for today", false, Icons.Rounded.SkipNext)
+    }
+
+    // ── Layout ─────────────────────────────────────────────────────────────
+    val visibleAndFiltered = if (categoryFilter == null) visibleScheduledToday
+    else visibleScheduledToday.filter { it.category == categoryFilter }
+    val activeFiltered = visibleAndFiltered.filter { !it.isCompleted && !it.isPaused }
+    val completedFiltered = visibleAndFiltered.filter { it.isCompleted }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = onNavigateToAddHabit,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = CircleShape
+                ) { Icon(Icons.Rounded.Add, "Add Habit") }
+            }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // ── Trial pill (dismissible for the rest of the day) ─────────────
+                if (showTrialPill) {
+                    item {
+                        val days = billingViewModel.freeTrialDaysRemaining()
+                        val pillColor = when (days) {
+                            1 -> Color(0xFFE53935)
+                            in 2..3 -> Color(0xFFFFB300)
+                            else -> Color(0xFF2D6A4F)
+                        }
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(999.dp),
+                            colors = CardDefaults.cardColors(containerColor = pillColor.copy(alpha = 0.18f)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Pro Trial: $days day${if (days == 1) "" else "s"} left",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    "Upgrade",
+                                    color = Color(0xFF52B788),
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    modifier = Modifier.clickable { onRequestPaywall(PaywallTrigger.GoPro) },
+                                )
+                                IconButton(
+                                    onClick = { scope.launch { store.dismissTrialPillForToday() } },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onBackground.copy(0.5f))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+
+                // ── Challenge proof reminder (habit done, arena proof missing) ──
+                challengeViewModel?.let { cvm ->
+                    val proofReminder = visibleScheduledToday
+                        .mapNotNull { habit ->
+                            cvm.challengeProofReminderForHabit(habit.title, habit.isCompleted)?.let { ch -> habit to ch }
+                        }
+                        .firstOrNull()
+                    if (proofReminder != null) {
+                        val (habit, challenge) = proofReminder
+                        item {
+                            Card(
+                                onClick = {
+                                    onNavigateToChallenge?.invoke(challenge.id)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.CameraAlt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Post to ${challenge.habitName}",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            "${habit.title} is done — add your arena proof so it counts.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Rounded.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Referral promo ───────────────────────────────────────────
+                if (referralState.showBanner) {
+                    item {
+                        ReferralPromoBanner(
+                            qualifiedCount = referralState.qualifiedCount,
+                            friendsRequired = referralState.friendsRequired,
+                            rewardDays = referralState.rewardDays,
+                            onOpen = onOpenReferral,
+                            onDismiss = onDismissReferralBanner,
+                        )
+                    }
+                }
+
+                duoState?.let { duo ->
+                    item {
+                        DuoStreakCard(
+                            state = duo,
+                            onAccept = { onAcceptDuoInvite(duo.pairId) },
+                            onDecline = { onDeclineDuoInvite(duo.pairId) },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
+
+                // ── Profile completion nudge ─────────────────────────────────
+                if (onNavigateToEditProfile != null) {
+                    item {
+                        com.saintnico.verdlyhabits.ui.screens.profile.ProfileCompletionNudgeBanner(
+                            displayName = userName,
+                            username = userUsername,
+                            photoUrl = userPhotoUri,
+                            motto = userMotto,
+                            bio = userBio,
+                            favoritePlant = userFavoritePlant,
+                            onCompleteProfile = onNavigateToEditProfile,
+                        )
+                    }
+                }
+
+                // ── Greeting + momentum bar ────────────────────────────────
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "$timeGreeting, $displayName.",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    WavingHandIcon(size = 24.dp)
+                                }
+                                Text(
+                                    moodCopy,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                                )
+                            }
+                            ShieldBadge(shieldCount)
+                            Spacer(Modifier.width(4.dp))
+                            NotificationBellButton(
+                                unreadCount = notificationBadgeCount,
+                                onClick = onOpenNotifications,
+                            )
+                            IconButton(onClick = onNavigateToSettings) {
+                                Icon(
+                                    Icons.Rounded.Tune, null,
+                                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                        if (visibleScheduledToday.isNotEmpty()) {
+                            MomentumBar(progress = completionRate, xpToday = xpToday)
+                        }
+                    }
+                }
+
+                // ── Hero ring + streak summary ─────────────────────────────
+                if (visibleScheduledToday.isNotEmpty()) {
+                    item {
+                        DashboardHero(
+                            completionRate = completionRate,
+                            completedCount = completed.size,
+                            totalCount = visibleScheduledToday.size,
+                            totalStreak = totalStreak,
+                            onTap = { onNavigateToStats?.invoke() }
+                        )
+                    }
+                }
+
+                // ── Today's Focus pinned card ──────────────────────────────
+                if (pinned != null && !pinned.isCompleted) {
+                    item {
+                        TodayFocusPinnedCard(
+                            habit = pinned,
+                            onTapComplete = { handleCompletion(pinned) },
+                            onTapFocus = { onNavigateToFocus?.invoke(pinned.id) },
+                            onEdit = { onNavigateToEditHabit(pinned.id) }
+                        )
+                    }
+                }
+
+                // ── Category filter chips ──────────────────────────────────
+                if (visible.size >= 3) {
+                    item {
+                        CategoryFilterRow(
+                            selected = categoryFilter,
+                            onSelect = { categoryFilter = if (categoryFilter == it) null else it }
+                        )
+                    }
+                }
+
+                // ── Motivational insight card ──────────────────────────────
+                if (!insightDismissed && visible.isNotEmpty()) {
+                    item {
+                        val insight = remember(visible, totalStreak) {
+                            MotivationalEngine.topInsight(
+                                habits = visible,
+                                longestStreakEver = totalStreak,
+                                totalCompletions = statsState?.value?.totalCompletions ?: 0,
+                                totalXp = statsState?.value?.totalXp ?: 0
+                            )
+                        }
+                        PremiumInsightCard(
+                            insight = insight,
+                            onDismiss = { insightDismissed = true }
+                        )
+                    }
+                }
+
+                // ── Empty state ────────────────────────────────────────────
+                if (visible.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 60.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Rounded.Eco, null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.18f)
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                stringResource(R.string.start_planting),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else if (visibleScheduledToday.isEmpty()) {
+                    item {
+                        Text(
+                            "No habits scheduled for today. Edit a habit to change frequency, or come back on your next scheduled day.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                            modifier = Modifier.padding(vertical = 24.dp, horizontal = 8.dp),
+                        )
+                    }
+                } else {
+                    item {
+                        SectionLabel(
+                            "Today",
+                            "${activeFiltered.size} to go",
+                            highlight = activeFiltered.isEmpty() && completedFiltered.isNotEmpty()
+                        )
+                    }
+                    itemsIndexed(activeFiltered, key = { _, h -> h.id }) { index, habit ->
+                        val isAtRisk = now.hour >= 21 && habit.streak > 7
+                        // Staggered entrance animation
+                        val entryAlpha = remember { Animatable(0f) }
+                        val entryOffset = remember { Animatable(24f) }
+                        LaunchedEffect(habit.id) {
+                            delay(index * 40L)
+                            launch { entryAlpha.animateTo(1f, tween(350)) }
+                            entryOffset.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 300f))
+                        }
+                        HabitSwipeCard(
+                            habit = habit,
+                            isAtRisk = isAtRisk,
+                            onTap = { handleCompletion(habit) },
+                            onSwipeComplete = { handleCompletion(habit) },
+                            onSwipeSkip = { onSwipeSkip(habit) },
+                            onLongPress = { selectedHabitForActions = habit },
+                            onFocusTap = {
+                                selectedHabitForTimer = habit
+                                showTimePicker = true
+                            },
+                            modifier = Modifier.graphicsLayer {
+                                alpha = entryAlpha.value
+                                translationY = entryOffset.value
+                            }
+                        )
+                    }
+                }
+
+                // ── 30-day strip ───────────────────────────────────────────
+                if (visible.isNotEmpty()) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(1.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigateToStats?.invoke() }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                MiniHeatmapStrip(habits = visible)
+                            }
+                        }
+                    }
+                }
+
+                // ── Completed section ──────────────────────────────────────
+                if (completedFiltered.isNotEmpty()) {
+                    item {
+                        SectionLabel("Completed", "${completedFiltered.size}", highlight = false)
+                    }
+                    items(completedFiltered, key = { it.id }) { habit ->
+                        HabitSwipeCard(
+                            habit = habit,
+                            isAtRisk = false,
+                            onTap = { viewModel.toggleHabitCompletion(habit.id) },
+                            onSwipeComplete = { viewModel.toggleHabitCompletion(habit.id) },
+                            onSwipeSkip = { viewModel.toggleHabitCompletion(habit.id) },
+                            onLongPress = { selectedHabitForActions = habit },
+                            onFocusTap = null
+                        )
+                    }
+                }
+
+                item { Spacer(Modifier.height(96.dp)) }
+            }
+        }
+
+        // XP popup
+        AnimatedVisibility(visible = showXpPopup, enter = fadeIn(), exit = fadeOut()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    xpPopupText,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = xpAlpha; translationY = xpOffset
+                    }
+                )
+            }
+        }
+
+        // Confetti overlays
+        CelebrationKonfetti(trigger = konfettiTrigger, intensity = BurstIntensity.NORMAL)
+        CelebrationKonfetti(trigger = hugeKonfettiTrigger, intensity = BurstIntensity.HUGE)
+    }
+
+    // ── Action sheet ───────────────────────────────────────────────────────
+    if (selectedHabitForActions != null) {
+        val habit = selectedHabitForActions!!
+        ModalBottomSheet(
+            onDismissRequest = { selectedHabitForActions = null },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(habit.color.toInt()).copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(habit.icon, null, tint = Color(habit.color.toInt()), modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(habit.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${habit.difficulty.displayName} · ${habit.category.displayName} · ${habit.streak}d",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                ActionRow(Icons.Rounded.PushPin, if (habit.isFavoriteFocus) "Unpin from Today's Focus" else "Pin to Today's Focus") {
+                    viewModel.setTodayFocus(if (habit.isFavoriteFocus) null else habit.id)
+                    scope.launch { sheetState.hide() }
+                    selectedHabitForActions = null
+                }
+                ActionRow(Icons.Rounded.Timer, "Focus session") {
+                    onNavigateToFocus?.invoke(habit.id)
+                    scope.launch { sheetState.hide() }
+                    selectedHabitForActions = null
+                }
+                ActionRow(Icons.Rounded.Edit, stringResource(R.string.action_edit)) {
+                    scope.launch { sheetState.hide() }
+                    selectedHabitForActions = null
+                    onNavigateToEditHabit(habit.id)
+                }
+                ActionRow(
+                    if (habit.isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                    if (habit.isPaused) "Resume habit" else stringResource(R.string.action_pause)
+                ) {
+                    viewModel.pauseHabit(habit.id)
+                    scope.launch { sheetState.hide() }
+                    selectedHabitForActions = null
+                }
+                ActionRow(Icons.Rounded.Inventory2, stringResource(R.string.action_archive)) {
+                    viewModel.archiveHabit(habit.id)
+                    scope.launch { sheetState.hide() }
+                    selectedHabitForActions = null
+                }
+                ActionRow(Icons.Rounded.DeleteOutline, stringResource(R.string.action_delete), tint = Color(0xFFEF5350)) {
+                    showDeleteConfirm = true
+                    scope.launch { sheetState.hide() }
+                }
+            }
+        }
+    }
+
+    if (showDeleteConfirm && selectedHabitForActions != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; selectedHabitForActions = null },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_body, selectedHabitForActions!!.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteHabit(selectedHabitForActions!!.id)
+                    showDeleteConfirm = false; selectedHabitForActions = null
+                }) {
+                    Text(stringResource(R.string.delete_confirm_button), color = Color(0xFFEF5350))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false; selectedHabitForActions = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    if (showTimePicker && selectedHabitForTimer != null) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val hour = timePickerState.hour
+                    val minute = timePickerState.minute
+                    val timeStr = "%02d:%02d".format(hour, minute)
+                    val updated = selectedHabitForTimer!!.copy(
+                        reminderTime = timeStr,
+                        reminderEnabled = true
+                    )
+                    viewModel.updateHabit(updated)
+                    showTimePicker = false
+                    onShowNotification?.invoke("Reminder for ${updated.title} set at $timeStr", false, updated.icon)
+                }) { Text("Set reminder") }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancel") } },
+            title = { Text("Set Daily Reminder", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    TimePicker(state = timePickerState)
+                }
+            }
+        )
+    }
+
+    if (showSharePromptFor != null && sharedPhotoUri != null) {
+        val habit = showSharePromptFor!!
+        AlertDialog(
+            onDismissRequest = { showSharePromptFor = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StreakFlame(streak = habit.streak + 1, size = 24.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share Your Victory", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = { Text("You crushed ${habit.title}. Flex your ${habit.streak + 1}-day streak.") },
+            confirmButton = {
+                Button(onClick = {
+                    com.saintnico.verdlyhabits.utils.ShareUtils.shareHabitCompletion(
+                        context = context,
+                        sourceUri = sharedPhotoUri!!,
+                        streak = habit.streak + 1,
+                        habitName = habit.title,
+                        level = userStatsViewModel?.state?.value?.level ?: 1
+                    )
+                    showSharePromptFor = null
+                }) {
+                    Icon(Icons.Rounded.Share, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share proof")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSharePromptFor = null }) { Text("Not now") }
+            }
+        )
+    }
+
+    if (pendingStreakMilestone != null) {
+        val habit = pendingStreakMilestone!!
+        AlertDialog(
+            onDismissRequest = { pendingStreakMilestone = null },
+            title = { Text("Share your streak?", fontWeight = FontWeight.Bold) },
+            text = { Text("Invite friends — you both grow with Verdly.") },
+            confirmButton = {
+                Button(onClick = {
+                    pendingStreakMilestone = null
+                    shareStreakCardWithImage(
+                        context,
+                        headline = "7-Day Streak",
+                        habitName = habit.title,
+                    )
+                }) { Text("Share card") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingStreakMilestone = null }) { Text("Not now") }
+            },
+        )
+    }
+
+    // Paywall is hosted at the navigation root (ModalBottomSheet).
+    
+    // ── Trophy Unlock Ceremony ───────────────────────────────────────────────
+    val newlyUnlocked = statsState?.value?.newlyUnlocked
+    if (newlyUnlocked != null) {
+        com.saintnico.verdlyhabits.ui.components.TrophyUnlockCeremony(
+            achievement = newlyUnlocked,
+            haptics = haptics,
+            sound = sound,
+            onDismiss = { userStatsViewModel?.clearNewlyUnlocked() },
+            onShare = {
+                userStatsViewModel?.clearNewlyUnlocked()
+                // You could share a beautiful image here
+                com.saintnico.verdlyhabits.ui.components.share.shareStreakCardWithImage(
+                    context,
+                    headline = "Trophy Unlocked",
+                    habitName = newlyUnlocked.title,
+                )
+            }
+        )
+    }
+}
+
+// ── Sub-composables ──────────────────────────────────────────────────────────
+
+@Composable
+private fun DashboardHero(
+    completionRate: Float,
+    completedCount: Int,
+    totalCount: Int,
+    totalStreak: Int,
+    onTap: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DashboardProgressRing(
+                progress = completionRate,
+                title = "today",
+                subtitle = if (completionRate >= 1f) "All complete" else null
+            )
+            Spacer(Modifier.width(20.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                HeroStatRow(
+                    icon = { StreakFlame(streak = totalStreak, size = 22.dp) },
+                    label = "Active streaks",
+                    value = "$totalStreak"
+                )
+                HeroStatRow(
+                    icon = {
+                        Icon(
+                            Icons.Rounded.TaskAlt, null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    label = "Completed",
+                    value = "$completedCount / $totalCount"
+                )
+                HeroStatRow(
+                    icon = {
+                        Icon(
+                            Icons.Rounded.QueryStats, null,
+                            tint = Color(0xFFFFB300),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    label = "Tap for full stats",
+                    value = "→"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroStatRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    value: String
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) { icon() }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+    }
+}
+
+@Composable
+private fun TodayFocusPinnedCard(
+    habit: HabitItem,
+    onTapComplete: () -> Unit,
+    onTapFocus: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+        elevation = CardDefaults.cardElevation(0.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                        Color(0xFFFFB300).copy(alpha = 0.45f)
+                    )
+                ),
+                shape = RoundedCornerShape(22.dp)
+            )
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.AutoAwesome, null,
+                    tint = Color(0xFFFFB300),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Today's focus",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color(habit.color.toInt()).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(habit.icon, null, tint = Color(habit.color.toInt()), modifier = Modifier.size(28.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        habit.title,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StreakFlame(streak = habit.streak, size = 14.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "${habit.streak}-day streak · ${habit.difficulty.displayName}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onTapComplete,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Complete", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onTapFocus,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Rounded.Timer, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Focus", fontWeight = FontWeight.SemiBold)
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Rounded.MoreHoriz, null,
+                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryFilterRow(
+    selected: HabitCategory?,
+    onSelect: (HabitCategory) -> Unit
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(HabitCategory.entries.toTypedArray()) { cat ->
+            val isOn = cat == selected
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = if (isOn) cat.color.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = if (isOn) cat.color else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)
+                ),
+                modifier = Modifier.clickable { onSelect(cat) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(cat.color)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        cat.displayName,
+                        fontSize = 11.sp,
+                        fontWeight = if (isOn) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isOn) cat.color else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightCard(text: String, onDismiss: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Rounded.Lightbulb, null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                Icon(
+                    Icons.Rounded.Close, null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(title: String, badge: String, highlight: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+            modifier = Modifier.weight(1f)
+        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(
+                    if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f)
+                )
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        ) {
+            Text(
+                badge,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (highlight) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShieldBadge(count: Int) {
+    if (count <= 0) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color(0xFFFFB300).copy(alpha = 0.15f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Icon(Icons.Rounded.Shield, null, tint = Color(0xFFFFB300), modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text("$count", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB8860B))
+    }
+}
+
+@Composable
+private fun ActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color = LocalContentColor.current,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, modifier = Modifier.size(22.dp), tint = tint)
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = tint)
+    }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+private fun highestPriority(active: List<HabitItem>): HabitItem? {
+    // Pick a sensible default for the Today's Focus card: longest current streak
+    // (so the user is protecting their most valuable streak first), tie-break to
+    // hardest difficulty.
+    return active
+        .filter { !it.isPaused }
+        .maxWithOrNull(
+            compareBy<HabitItem> { it.streak }
+                .thenBy { it.difficulty.xp }
+        )
+}
+
+/**
+ * Centralised feedback for a completion. Runs sound, haptics, XP flash and the
+ * right intensity of confetti. Keeps the call site small.
+ */
+private fun registerCompletionFx(
+    scope: kotlinx.coroutines.CoroutineScope,
+    sound: SoundEngine,
+    haptics: com.saintnico.verdlyhabits.haptics.HapticsEngine,
+    soundEnabled: Boolean,
+    hapticsEnabled: Boolean,
+    streak: Int,
+    onXpFlash: () -> Unit,
+    onClearFlash: () -> Unit,
+    onKonfettiNormal: () -> Unit,
+    onKonfettiHuge: () -> Unit
+) {
+    onXpFlash()
+    val isMilestone = streak == 7 || streak == 30 || streak == 100
+    when {
+        streak == 100 -> {
+            sound.playChime(SoundEngine.Chime.MILESTONE_100, soundEnabled)
+            haptics.celebration(hapticsEnabled)
+            onKonfettiHuge()
+        }
+        streak == 30 -> {
+            sound.playChime(SoundEngine.Chime.MILESTONE_30, soundEnabled)
+            haptics.celebration(hapticsEnabled)
+            onKonfettiHuge()
+        }
+        streak == 7 -> {
+            sound.playChime(SoundEngine.Chime.MILESTONE_7, soundEnabled)
+            haptics.celebration(hapticsEnabled)
+            onKonfettiNormal()
+        }
+        else -> {
+            sound.playChime(SoundEngine.Chime.COMPLETE, soundEnabled)
+            haptics.success(hapticsEnabled)
+            onKonfettiNormal()
+        }
+    }
+    scope.launch {
+        delay(if (isMilestone) 2200 else 1400)
+        onClearFlash()
+    }
+}
+

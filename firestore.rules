@@ -1,0 +1,277 @@
+// Verdly Habits Firestore Security Rules
+//
+// Deploy: `firebase deploy --only firestore` (requires firebase.json in project root)
+// Or paste into Firebase Console → Firestore Database → Rules → Publish.
+// Without these rules, Connect / friend requests and challenge joins return PERMISSION_DENIED.
+//
+// Design summary:
+//  - challenges/{id}: only members can list. Anyone signed in can `get` by id
+//    (so deep links / pasted ids still work). Any signed-in user may update the
+//    doc IF the only thing they are doing is adding themselves to `members`
+//    (the join flow). Members may update their own progress fields. Only the
+//    creator may end / archive the challenge.
+//  - invites/{INVITECODE}: any signed-in user can `get` to resolve a code to a
+//    challenge id. Only the creator may write the invite mapping (done in the
+//    same batch as challenge creation).
+//  - users/{uid}: each user reads / writes their own doc; others can read a
+//    minimal public profile (username, photoUrl) for leaderboards.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // --- users ---
+    match /users/{userId} {
+      // Public read so other members can render names / avatars on leaderboards.
+      allow read: if signedIn();
+      allow create, update: if signedIn() && uid() == userId;
+      allow delete: if false;
+
+      // In-app notification inbox (friend requests, duo invites, arena, activity).
+      match /inbox/{itemId} {
+        allow read, update, delete: if signedIn() && uid() == userId;
+        allow create: if signedIn()
+          && request.resource.data.actorUid == uid()
+          && request.resource.data.type is string
+          && request.resource.data.title is string
+          && request.resource.data.body is string;
+      }
+    }
+
+    // --- friendRequests: Connect / friends (doc id: {fromUid}_{toUid}) ---
+    match /friendRequests/{requestId} {
+      // GET on a missing doc must be allowed or Connect fails before first write
+      // (resource is null when the doc does not exist yet).
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/friendRequests/$(requestId))
+        || resource.data.fromUid == uid()
+        || resource.data.toUid == uid()
+      );
+
+      allow list: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+
+      allow create: if signedIn()
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != uid()
+        && request.resource.data.status == 'pending';
+
+      // Full-document writes from the app; either party may update if they are from/to.
+      allow update: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid())
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid;
+
+      allow delete: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.toUid == uid());
+    }
+
+    // --- challengeJoinRequests: "Ask to join" on a rival's arena ---
+    match /challengeJoinRequests/{requestId} {
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/challengeJoinRequests/$(requestId))
+        || resource.data.fromUid == uid()
+        || resource.data.hostUid == uid()
+        || resource.data.targetMemberUid == uid()
+      );
+
+      allow list: if signedIn()
+        && (resource.data.fromUid == uid()
+          || resource.data.hostUid == uid()
+          || resource.data.targetMemberUid == uid());
+
+      allow create: if signedIn()
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.hostUid is string
+        && request.resource.data.challengeId is string
+        && request.resource.data.status == 'pending';
+
+      allow update: if signedIn()
+        && resource.data.hostUid == uid()
+        && request.resource.data.status in ['approved', 'declined'];
+
+      allow delete: if signedIn()
+        && (resource.data.fromUid == uid() || resource.data.hostUid == uid());
+    }
+
+    // --- invites: public-by-code mapping ---
+    match /invites/{code} {
+      // Any signed-in user can resolve a known 6-letter code to its challenge id.
+      // List is intentionally disabled — codes must be shared out-of-band.
+      allow get: if signedIn();
+      allow list: if false;
+
+      // The creator writes the mapping in the same batch as the challenge.
+      allow create: if signedIn()
+        && request.resource.data.creatorId == uid()
+        && request.resource.data.challengeId is string
+        && request.resource.data.inviteCode == code;
+
+      // Allow the original creator to mark an invite inactive (e.g. on end).
+      allow update: if signedIn() && resource.data.creatorId == uid();
+      allow delete: if signedIn() && resource.data.creatorId == uid();
+    }
+
+    // --- challenges ---
+    match /challenges/{challengeId} {
+
+      function isMember() {
+        return signedIn() && uid() in resource.data.members;
+      }
+
+      function isCreator() {
+        return signedIn() && resource.data.creatorId == uid();
+      }
+
+      function reactionPointsChanged() {
+        return request.resource.data.memberReactionPoints != resource.data.memberReactionPoints;
+      }
+
+      // Denormalized points may only move as part of a reaction update. The app
+      // enforces exact valid deltas transactionally; rules prevent standalone
+      // arbitrary point writes.
+      function validReactionPointWrite() {
+        return !reactionPointsChanged()
+          || request.resource.data.reactions != resource.data.reactions;
+      }
+
+      // Single-document reads are allowed for any signed-in user (needed for
+      // join-by-code: the joiner must read the doc once before joining).
+      allow get: if signedIn();
+
+      // Listing the collection is restricted to "my challenges only" — clients
+      // should always include whereArrayContains("members", uid).
+      allow list: if signedIn() && uid() in resource.data.members;
+
+      allow create: if signedIn()
+        && request.resource.data.creatorId == uid()
+        && uid() in request.resource.data.members;
+
+      // Joining: a non-member is allowed to update IFF the only effect is
+      // adding themselves to members (and seeding their own per-user maps).
+      function isSelfJoin() {
+        return signedIn()
+          && !(uid() in resource.data.members)
+          && uid() in request.resource.data.members
+          && request.resource.data.members.size() == resource.data.members.size() + 1
+          // do not let a joiner flip core flags
+          && request.resource.data.creatorId == resource.data.creatorId
+          && request.resource.data.isActive == resource.data.isActive
+          && request.resource.data.startDate == resource.data.startDate
+          && request.resource.data.endDate == resource.data.endDate
+          && request.resource.data.inviteCode == resource.data.inviteCode;
+      }
+
+      // Existing members may update progress (completions, streaks, etc.).
+      // The creator may end/archive the challenge.
+      allow update: if isSelfJoin() || ((isMember() || isCreator()) && validReactionPointWrite());
+
+      allow delete: if isCreator();
+
+      // --- activity feed events written by markCompletion etc. ---
+      match /activity/{eventId} {
+        allow read: if signedIn() && uid() in get(/databases/$(database)/documents/challenges/$(challengeId)).data.members;
+        allow create: if signedIn() && uid() in get(/databases/$(database)/documents/challenges/$(challengeId)).data.members;
+        // Actor may replace or remove their own feed docs (check-in delete / re-post uses deterministic ids).
+        allow update, delete: if signedIn()
+          && resource.data.actorId == request.auth.uid
+          && uid() in get(/databases/$(database)/documents/challenges/$(challengeId)).data.members;
+      }
+    }
+
+    match /notificationQueue/{queueId} {
+      allow create: if signedIn()
+        && request.resource.data.targetUid is string
+        && request.resource.data.title is string
+        && request.resource.data.body is string
+        && request.resource.data.challengeId is string;
+      allow read, update, delete: if false;
+    }
+
+    // --- proof reports ---
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.reporterUid == uid()
+        && request.resource.data.challengeId is string
+        && request.resource.data.proofKey is string;
+      allow read, update, delete: if false;
+    }
+
+    // --- user profile reports ---
+    match /userReports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.reporterUid == uid()
+        && request.resource.data.reportedUid is string
+        && request.resource.data.reasonCode is string
+        && request.resource.data.reportedUid != uid();
+      allow read, update, delete: if false;
+    }
+
+    // --- referral codes (code -> owner mapping) ---
+    match /referralCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == uid()
+        && request.resource.data.fullCode == code;
+      allow update: if signedIn()
+        && resource.data.ownerUid == uid()
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.fullCode == resource.data.fullCode;
+      allow delete: if false;
+    }
+
+    // --- duo streak / accountability pairs ---
+    match /duoStreaks/{pairId} {
+      allow get: if signedIn()
+        && request.auth.uid in resource.data.members;
+      allow list: if signedIn()
+        && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.members is list
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if signedIn()
+        && request.auth.uid in resource.data.members
+        && (
+          (resource.data.status == 'pending'
+            && request.resource.data.status == 'active'
+            && request.resource.data.invitedBy == resource.data.invitedBy)
+          || (resource.data.status == 'active'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['memberProgress', 'streakDays', 'lastBothCompleteDate']))
+        );
+      allow delete: if signedIn()
+        && request.auth.uid in resource.data.members;
+    }
+
+    // --- referral signups retention bonus flag ---
+    match /referrals/{referrerUid}/signups/{refereeUid} {
+      allow get: if signedIn()
+        && (referrerUid == uid() || refereeUid == uid());
+      allow list: if signedIn() && referrerUid == uid();
+      allow create: if signedIn()
+        && refereeUid == uid()
+        && referrerUid != uid()
+        && request.resource.data.refereeUid == uid()
+        && request.resource.data.referrerUid == referrerUid
+        && request.resource.data.code is string
+        && request.resource.data.status == 'qualified';
+      allow update: if signedIn() && referrerUid == uid()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['retentionBonusGranted'])
+        && request.resource.data.retentionBonusGranted == true;
+      allow delete: if false;
+    }
+  }
+}

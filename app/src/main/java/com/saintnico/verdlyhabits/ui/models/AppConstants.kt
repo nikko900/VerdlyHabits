@@ -1,0 +1,100 @@
+package com.saintnico.verdlyhabits.ui.models
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.LocalDrink
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.SelfImprovement
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.ui.graphics.vector.ImageVector
+
+data class PremiumIcon(
+    val id: String,
+    val vector: ImageVector,
+    val name: String
+)
+
+val premiumHabitIcons = listOf(
+    PremiumIcon("water", Icons.Default.WaterDrop, "Water"),
+    PremiumIcon("book", Icons.Default.Book, "Reading"),
+    PremiumIcon("run", Icons.Default.DirectionsRun, "Running"),
+    PremiumIcon("meditate", Icons.Default.SelfImprovement, "Meditation"),
+    PremiumIcon("food", Icons.Default.Restaurant, "Healthy Eating"),
+    PremiumIcon("meds", Icons.Default.Medication, "Medication"),
+    PremiumIcon("sleep", Icons.Default.Bedtime, "Sleep"),
+    PremiumIcon("code", Icons.Default.Code, "Coding"),
+    PremiumIcon("music", Icons.Default.MusicNote, "Music"),
+    PremiumIcon("savings", Icons.Default.Savings, "Savings"),
+    PremiumIcon("gym", Icons.Default.FitnessCenter, "Gym"),
+    PremiumIcon("art", Icons.Default.Brush, "Art"),
+    PremiumIcon("spa", Icons.Default.Spa, "Self Care"),
+    PremiumIcon("heart", Icons.Default.MonitorHeart, "Health"),
+    PremiumIcon("magic", Icons.Default.AutoAwesome, "Magic Routine")
+)
+
+val motivationalQuotes = listOf(
+    "We are what we repeatedly do. Excellence, then, is not an act, but a habit. — Aristotle",
+    "Motivation is what gets you started. Habit is what keeps you going. — Jim Ryun",
+    "Your net worth to the world is usually determined by what remains after your bad habits are subtracted from your good ones. — Benjamin Franklin",
+    "The secret of your future is hidden in your daily routine. — Mike Murdock",
+    "Success is the sum of small efforts, repeated day in and day out. — Robert Collier",
+    "Chains of habit are too light to be felt until they are too heavy to be broken. — Warren Buffett",
+    "Quality is not an act, it is a habit. — Aristotle",
+    "Depending on what they are, our habits will either make us or break us. We become what we repeatedly do. — Sean Covey",
+    "Habit is a cable; we weave a thread of it each day, and at last we cannot break it. — Horace Mann",
+    "You'll never change your life until you change something you do daily. — John C. Maxwell",
+    "First we make our habits, then our habits make us. — Charles C. Noble",
+    "Drop by drop is the water pot filled. — Buddha",
+    "Great things are done by a series of small things brought together. — Vincent Van Gogh",
+    "Small disciplines repeated with consistency every day lead to great achievements gained slowly over time. — John C. Maxwell",
+    "Good habits formed at youth make all the difference. — Aristotle",
+    "A journey of a thousand miles begins with a single step. — Lao Tzu",
+    "We first make our habits, and then our habits make us. — John Dryden",
+    "Routine, in an intelligent man, is a sign of ambition. — W. H. Auden",
+    "Discipline is choosing between what you want now and what you want most. — Abraham Lincoln",
+    "If you are going to achieve excellence in big things, you develop the habit in little matters. — Colin Powell",
+    "You do not rise to the level of your goals. You fall to the level of your systems. — James Clear",
+    "Habits are the compound interest of self-improvement. — James Clear",
+    "Every action you take is a vote for the type of person you wish to become. — James Clear",
+    "Success is a few simple disciplines, practiced every day; while failure is simply a few errors in judgment, repeated every day. — Jim Rohn",
+    "Nothing is stronger than habit. — Ovid",
+    "The only way to do great work is to love what you do. — Steve Jobs",
+    "It is not the mountain we conquer, but ourselves. — Sir Edmund Hillary",
+    "Don't let the fear of the time it will take to accomplish something stand in the way of your doing it. — Earl Nightingale",
+    "The difference between who you are and who you want to be is what you do. — Unknown",
+    "What you do today can improve all your tomorrows. — Ralph Marston",
+    "You can't cross the sea merely by standing and staring at the water. — Rabindranath Tagore",
+    "The future depends on what you do today. — Mahatma Gandhi",
+    "Success doesn't come from what you do occasionally, it comes from what you do consistently. — Marie Forleo",
+    "Act as if what you do makes a difference. It does. — William James",
+    "There are no shortcuts to any place worth going. — Beverly Sills",
+    "Strive not to be a success, but rather to be of value. — Albert Einstein",
+    "I attribute my success to this: I never gave or took any excuse. — Florence Nightingale",
+    "Start where you are. Use what you have. Do what you can. — Arthur Ashe",
+    "Everything you've ever wanted is on the other side of fear. — George Addair",
+    "Fall seven times and stand up eight. — Japanese Proverb",
+    "It always seems impossible until it's done. — Nelson Mandela",
+    "Dream big and dare to fail. — Norman Vaughan",
+    "If you can dream it, you can do it. — Walt Disney",
+    "Setting goals is the first step in turning the invisible into the visible. — Tony Robbins",
+    "Action is the foundational key to all success. — Pablo Picasso",
+    "Done is better than perfect. — Sheryl Sandberg",
+    "Believe you can and you're halfway there. — Theodore Roosevelt",
+    "You don't have to be great to start, but you have to start to be great. — Zig Ziglar",
+    "To begin, begin. — William Wordsworth",
+    "Do something today that your future self will thank you for. — Sean Patrick Flanery"
+)

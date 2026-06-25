@@ -1,0 +1,84 @@
+<resources>
+    <string name="app_name">Verdly</string>
+    <string name="greeting_morning">Good morning</string>
+    <string name="greeting_afternoon">Good afternoon</string>
+    <string name="greeting_evening">Good evening</string>
+    <string name="greeting_night">Good night</string>
+    <string name="habits_left_today">%d habits left for today</string>
+    <string name="habits_left_today_zero">All caught up for today!</string>
+    <string name="total_active_streaks">%d active streaks</string>
+    <string name="growing_roots">Growing roots</string>
+    <string name="add_habit_title">Plant new habit</string>
+    <string name="edit_habit_title">Edit Habit</string>
+    <string name="habit_name_hint">Habit Name</string>
+    <string name="habit_description_hint">Habit Description</string>
+    <string name="choose_icon">Choose Icon</string>
+    <string name="theme_color">Theme Color</string>
+    <string name="frequency_label">Frequency</string>
+    <string name="freq_daily">Daily</string>
+    <string name="freq_weekdays">Weekdays</string>
+    <string name="freq_weekends">Weekends</string>
+    <string name="freq_custom">Custom</string>
+    <string name="reminder_label">Reminder</string>
+    <string name="reminder_subtitle">Set a time</string>
+    <string name="reminder_at">Reminder at %s</string>
+    <string name="save_button">Plant Seed</string>
+    <string name="edit_save_button">Save Changes</string>
+    <string name="streak_days">%d day streak</string>
+    <string name="planted_on">Planted on %s</string>
+    <string name="completed_section">Completed</string>
+    <string name="settings_label">Settings</string>
+    <string name="appearance_label">Appearance</string>
+    <string name="dark_mode_label">Dark Mode</string>
+    <string name="language_label">Language</string>
+    <string name="action_edit">Edit Habit</string>
+    <string name="action_note">Add Note</string>
+    <string name="action_pause">Pause Streak</string>
+    <string name="action_archive">Archive</string>
+    <string name="action_delete">Delete Forever</string>
+    <string name="delete_confirm_title">Delete Habit</string>
+    <string name="delete_confirm_body">Remove %s? Your streak history will be lost.</string>
+    <string name="delete_confirm_button">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="notification_permission_granted">Notifications enabled!</string>
+    <string name="notification_permission_denied">Permission denied.</string>
+    <string name="habit_name_empty_error">Habit name cannot be empty</string>
+    <string name="archived_section">Archived</string>
+    <string name="paused_badge">Paused</string>
+    
+    <!-- Settings / Other strings not listed but needed -->
+    <string name="account_label">Account</string>
+    <string name="notifications_label">Notifications</string>
+    <string name="push_notifications">Push Notifications</string>
+    <string name="push_notifications_desc">Daily reminders to water your habits</string>
+    <string name="vibration">Vibration</string>
+    <string name="vibration_desc">Haptic feedback on habit completion</string>
+    <string name="dark_mode_desc">Easier on your eyes at night</string>
+    <string name="more_label">More</string>
+    <string name="rate_verdly">Rate Verdly</string>
+    <string name="rate_verdly_desc">Show Verdly Habits some love on the Play Store</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="privacy_policy_desc">How we handle your data</string>
+    <string name="about">About</string>
+    <string name="about_desc">Version 1.0.0</string>
+    <string name="clear_all_habits">Clear All Habits</string>
+    <string name="clear_all_habits_desc">This action cannot be undone</string>
+    <string name="start_planting">Start by planting your first habit.</string>
+    <string name="level_0_root">Level 0 Root</string>
+
+    <!-- Home screen widgets -->
+    <string name="widget_habits_title">Today\'s habits</string>
+    <string name="widget_habits_description">Your habits and streaks at a glance</string>
+    <string name="widget_habits_subtitle_empty">Open Verdly to plant habits</string>
+    <string name="widget_habits_subtitle_progress">%1$d of %2$d done today</string>
+    <string name="widget_habits_empty">No habits yet — tap to open Verdly</string>
+
+    <string name="widget_leaderboard_title">Live leaderboard</string>
+    <string name="widget_leaderboard_description">Arena standings from your active challenge</string>
+    <string name="widget_leaderboard_subtitle_empty">No active arena</string>
+    <string name="widget_leaderboard_empty">Join a challenge in Verdly</string>
+    <string name="widget_leaderboard_you_rank">You\'re #%1$d in this arena</string>
+    <string name="widget_leaderboard_live_badge">LIVE ARENA</string>
+    <string name="widget_leaderboard_hero_subtitle">Streak leaderboard · updates with your challenge</string>
+    <string name="widget_leaderboard_brand">VERDLY · Tap to compete</string>
+</resources>
