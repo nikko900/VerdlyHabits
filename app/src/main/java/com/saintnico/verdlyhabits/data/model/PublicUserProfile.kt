@@ -17,4 +17,7 @@ data class PublicUserProfile(
     val xp: Int = 0,
     /** When false, the "Recent proof" highlight reel is hidden from other viewers. */
     val showRecentProof: Boolean = true,
+    /** User-selected title id; null = auto signature on public profile. */
+    val equippedTitleId: String? = null,
+    val equippedTitleLabel: String? = null,
 )

@@ -5,29 +5,40 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Redeem
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.saintnico.verdlyhabits.ui.components.referral.ReferralAnnualOfferSheet
-import com.saintnico.verdlyhabits.ui.components.referral.ReferralShareSheet
-import com.saintnico.verdlyhabits.ui.viewmodel.AccountabilityViewModel
-import com.saintnico.verdlyhabits.ui.viewmodel.NotificationsViewModel
-import com.saintnico.verdlyhabits.ui.viewmodel.ReferralViewModel
-import com.saintnico.verdlyhabits.ui.screens.notifications.NotificationsHubScreen
 import androidx.navigation.NavType
 import androidx.navigation.*
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import android.net.Uri
+import com.saintnico.verdlyhabits.data.local.goals.GoalType
+import com.saintnico.verdlyhabits.monetization.PaywallTrigger
+import com.saintnico.verdlyhabits.navigation.NotificationLaunch
+import com.saintnico.verdlyhabits.session.clearSignedOutSession
+import com.saintnico.verdlyhabits.session.prepareSignedInSession
 import com.saintnico.verdlyhabits.ui.components.PremiumNotificationBar
+import com.saintnico.verdlyhabits.ui.components.ProPaywallSheet
+import com.saintnico.verdlyhabits.ui.components.referral.ReferralAnnualOfferSheet
+import com.saintnico.verdlyhabits.ui.components.referral.ReferralShareSheet
+import com.saintnico.verdlyhabits.ui.components.social.needsDuoAttention
 import com.saintnico.verdlyhabits.ui.screens.achievements.AchievementsScreen
+import com.saintnico.verdlyhabits.ui.screens.challenge.ChallengeScreen
+import com.saintnico.verdlyhabits.ui.screens.duo.DuoScreen
 import com.saintnico.verdlyhabits.ui.screens.focus.FocusModeScreen
 import com.saintnico.verdlyhabits.ui.screens.focus.PlantGardenScreen
-import android.net.Uri
 import com.saintnico.verdlyhabits.ui.screens.goals.GoalsHomeScreen
+import com.saintnico.verdlyhabits.ui.screens.goals.celebration.GoalCompletionScreen
+import com.saintnico.verdlyhabits.ui.screens.goals.celebration.MilestoneCelebrationScreen
+import com.saintnico.verdlyhabits.ui.screens.goals.checkin.WeeklyCheckInSheet
 import com.saintnico.verdlyhabits.ui.screens.goals.creation.GoalCreationScreen
 import com.saintnico.verdlyhabits.ui.screens.goals.detail.GoalDetailScreen
 import com.saintnico.verdlyhabits.ui.screens.habit.AddHabitScreen
@@ -35,36 +46,30 @@ import com.saintnico.verdlyhabits.ui.screens.home.HomeScreen
 import com.saintnico.verdlyhabits.ui.screens.login.LoginScreen
 import com.saintnico.verdlyhabits.ui.screens.login.SignUpScreen
 import com.saintnico.verdlyhabits.ui.screens.mood.MoodCheckInScreen
+import com.saintnico.verdlyhabits.ui.screens.notifications.NotificationsHubScreen
 import com.saintnico.verdlyhabits.ui.screens.profile.AccountScreen
 import com.saintnico.verdlyhabits.ui.screens.profile.MemberProfileScreen
 import com.saintnico.verdlyhabits.ui.screens.profile.SubscriptionManageScreen
 import com.saintnico.verdlyhabits.ui.screens.settings.EditProfileScreen
 import com.saintnico.verdlyhabits.ui.screens.settings.SettingsScreen
 import com.saintnico.verdlyhabits.ui.screens.stats.StatsScreen
-import com.saintnico.verdlyhabits.ui.screens.challenge.ChallengeScreen
+import com.saintnico.verdlyhabits.ui.viewmodel.AccountabilityViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.ChallengeViewModel
-import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.FocusViewModel
-import com.saintnico.verdlyhabits.navigation.NotificationLaunch
-import com.saintnico.verdlyhabits.ui.screens.goals.checkin.WeeklyCheckInSheet
-import com.saintnico.verdlyhabits.ui.screens.goals.celebration.GoalCompletionScreen
-import com.saintnico.verdlyhabits.ui.screens.goals.celebration.MilestoneCelebrationScreen
+import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.GoalCelebration
 import com.saintnico.verdlyhabits.ui.viewmodel.GoalsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.MoodViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.NotificationsViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.ReferralViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.SettingsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
-import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
-import com.saintnico.verdlyhabits.data.local.goals.GoalType
-import com.saintnico.verdlyhabits.monetization.PaywallTrigger
-import com.saintnico.verdlyhabits.session.clearSignedOutSession
-import com.saintnico.verdlyhabits.session.prepareSignedInSession
-import com.saintnico.verdlyhabits.ui.components.ProPaywallSheet
+import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.snapshotFlow
 
 // ─── Route constants ─────────────────────────────────────────────────────────
 sealed class Screen(val route: String) {
@@ -78,6 +83,7 @@ sealed class Screen(val route: String) {
     object Goals : Screen("goals")
     object Profile : Screen("profile")
     object Challenges : Screen("challenges")
+    object Duo : Screen("duo")
     object Achievements : Screen("achievements")
     object AddHabit : Screen("add_habit")
     object EditHabit : Screen("edit_habit/{habitId}") {
@@ -534,11 +540,48 @@ private fun MainShell(
                 innerNavController.navigate("notifications") { launchSingleTop = true }
                 onNotificationLaunchConsumed()
             }
+            NotificationLaunch.Duo -> {
+                innerNavController.navigate("duo") {
+                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                onNotificationLaunchConsumed()
+            }
             null -> Unit
         }
     }
 
     // Show bottom nav on main tabs; hide on nested focus/{id}, stats, and goals sub-flows
+    LaunchedEffect(widgetLaunch) {
+        val launch = widgetLaunch ?: return@LaunchedEffect
+        when (launch.route) {
+            com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_CHALLENGES -> {
+                launch.challengeId?.let { challengeViewModel.requestOpenChallengeDetail(it) }
+                innerNavController.navigate("challenges") {
+                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+            com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_DUO -> {
+                innerNavController.navigate("duo") {
+                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+            else -> {
+                innerNavController.navigate("home") {
+                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        }
+        onWidgetLaunchConsumed()
+    }
+
     LaunchedEffect(widgetLaunch) {
         val launch = widgetLaunch ?: return@LaunchedEffect
         when (launch.route) {
@@ -582,6 +625,7 @@ private fun MainShell(
     val incomingFriends by friendsViewModel.incomingRequestsUi.collectAsState()
     val arenaInvites by friendsViewModel.pendingChallengeJoinRequests.collectAsState()
     val bellBadgeCount = maxOf(
+        notifState.pendingActionCount,
         notifState.unreadCount,
         incomingFriends.size + arenaInvites.size + if (duoState?.isIncomingInvite == true) 1 else 0,
     )
@@ -628,6 +672,34 @@ private fun MainShell(
         }
     }
 
+    LaunchedEffect(hasFullAccess) {
+        accountabilityViewModel.setPremiumAccess(hasFullAccess)
+    }
+
+    LaunchedEffect(userUsername) {
+        accountabilityViewModel.setMyUsername(userUsername)
+    }
+
+    var duoMilestone by remember { mutableStateOf<com.saintnico.verdlyhabits.data.remote.firestore.DuoMilestoneReached?>(null) }
+    var duoBroken by remember { mutableStateOf<com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakBroken?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(accountabilityViewModel) {
+        accountabilityViewModel.milestoneEvent.collect { duoMilestone = it }
+    }
+    LaunchedEffect(accountabilityViewModel) {
+        accountabilityViewModel.streakBrokenEvent.collect { duoBroken = it }
+    }
+
+    val duoNeedsAttention = duoState.needsDuoAttention()
+    val navigateToDuo: () -> Unit = {
+        innerNavController.navigate("duo") {
+            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     LaunchedEffect(habitViewModel, accountabilityViewModel) {
         snapshotFlow { habitViewModel.habits.toList() }
             .distinctUntilChanged()
@@ -636,7 +708,7 @@ private fun MainShell(
                 if (active.isEmpty()) return@collect
                 val today = java.time.LocalDate.now().toString()
                 val completed = active.count { it.completedDates.contains(today) }
-                accountabilityViewModel.syncFromHabits(completed, active.size)
+                accountabilityViewModel.syncFromHabits(completed, active.size, userStatsViewModel)
             }
     }
 
@@ -652,7 +724,9 @@ private fun MainShell(
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
+                    },
+                    duoGlowing = duoNeedsAttention,
+                    duoAtRisk = duoState?.streakAtRisk == true,
                 )
             }
         }
@@ -707,11 +781,48 @@ private fun MainShell(
                         showReferralInvite = true
                     },
                     onDismissReferralBanner = { referralViewModel.dismissBanner() },
-                    duoState = duoState,
-                    onAcceptDuoInvite = { accountabilityViewModel.acceptInvite(it) },
-                    onDeclineDuoInvite = { accountabilityViewModel.declineInvite(it) },
+                    onNavigateToDuo = navigateToDuo,
+                    duoNeedsAttention = duoNeedsAttention,
+                    duoAtRisk = duoState?.streakAtRisk == true,
                     notificationBadgeCount = bellBadgeCount,
                     onOpenNotifications = navigateToNotifications,
+                )
+            }
+            composable("duo") {
+                com.saintnico.verdlyhabits.ui.screens.duo.DuoScreen(
+                    duoState = duoState,
+                    friendsViewModel = friendsViewModel,
+                    myUsername = userUsername,
+                    myPhotoUrl = userPhotoUri,
+                    hasDuoBuddy = duoState?.status == "active" || duoState?.status == "pending",
+                    onAcceptInvite = { accountabilityViewModel.acceptInvite(it) },
+                    onDeclineInvite = { accountabilityViewModel.declineInvite(it) },
+                    onApplyGrace = { pairId ->
+                        accountabilityViewModel.applyGrace(pairId) { ok, err ->
+                            onShowNotification(
+                                if (ok) "Pro shield applied — yesterday forgiven" else (err ?: "Couldn't apply shield"),
+                                !ok,
+                                null,
+                            )
+                        }
+                    },
+                    onInviteBuddy = { uid, username, photo, onResult ->
+                        accountabilityViewModel.inviteBuddy(
+                            uid = uid,
+                            username = username,
+                            photoUrl = photo,
+                            myUsername = userUsername.ifBlank { userName },
+                            myPhotoUrl = userPhotoUri,
+                            onResult = onResult,
+                        )
+                    },
+                    onNavigateToMemberProfile = navigateToMemberProfile,
+                    onShowNotification = { msg, isError -> onShowNotification(msg, isError, null) },
+                    referralState = referralState,
+                    onOpenReferral = {
+                        referralViewModel.ensureReady()
+                        showReferralInvite = true
+                    },
                 )
             }
             composable("notifications") {
@@ -847,19 +958,49 @@ private fun MainShell(
             }
             composable("profile") {
                 val challengeState by challengeViewModel.state.collectAsState()
+                val friendSummaries by friendsViewModel.friendSummaries.collectAsState()
+                val equippedTitleId by settingsViewModel.equippedTitleId.collectAsState()
                 val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+                val allUserChallenges = remember(challengeState.challenges, challengeState.archivedChallenges, uid) {
+                    (challengeState.challenges + challengeState.archivedChallenges)
+                        .distinctBy { it.id }
+                        .filter { uid.isNotEmpty() && uid in it.members }
+                }
+                val habitsSnapshot = habitViewModel.habits
+                    .filter { !it.isArchived && !it.isPaused }
+                    .map { it.id to it.completedDates.size }
+                val hasPerfectWeek = remember(habitsSnapshot) {
+                    val active = habitViewModel.habits.filter { !it.isArchived && !it.isPaused }
+                    if (active.isEmpty()) {
+                        false
+                    } else {
+                        val today = LocalDate.now()
+                        (0..6).all { offset ->
+                            val day = today.minusDays(offset.toLong()).toString()
+                            active.all { it.completedDates.contains(day) }
+                        }
+                    }
+                }
                 AccountScreen(
                     statsState = statsState,
                     activeChallenges = challengeState.challenges.filter { ch ->
                         ch.isActive && uid.isNotEmpty() && uid in ch.members
                     },
+                    allUserChallenges = allUserChallenges,
                     userId = uid,
                     userName = userName,
                     userUsername = userUsername,
                     userPhotoUri = userPhotoUri,
                     userBio = userBio,
+                    equippedTitleId = equippedTitleId,
+                    onEquipTitle = { id, label -> settingsViewModel.setEquippedTitleId(id, label) },
                     billingViewModel = billingViewModel,
                     friendsViewModel = friendsViewModel,
+                    friendSummaries = friendSummaries,
+                    duoState = duoState,
+                    referralState = referralState,
+                    weeklyProfileViews = 0,
+                    hasPerfectWeek = hasPerfectWeek,
                     onNavigateToEditProfile = onNavigateToEditProfile,
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToAchievements = onNavigateToAchievements,
@@ -887,15 +1028,15 @@ private fun MainShell(
                     hasDuoBuddy = duoState != null,
                     myUsername = userUsername,
                     myPhotoUrl = userPhotoUri,
-                    onInviteAccountabilityBuddy = { uid, username, photo ->
+                    onInviteAccountabilityBuddy = { uid, username, photo, onResult ->
                         accountabilityViewModel.inviteBuddy(
                             uid = uid,
                             username = username,
                             photoUrl = photo,
                             myUsername = userUsername.ifBlank { userName },
                             myPhotoUrl = userPhotoUri,
+                            onResult = onResult,
                         )
-                        onShowNotification("Duo streak invite sent to @$username", false, null)
                     },
                     notificationBadgeCount = bellBadgeCount,
                     onOpenNotifications = navigateToNotifications,
@@ -974,6 +1115,38 @@ private fun MainShell(
             }
         }
         null -> Unit
+    }
+
+    duoMilestone?.let { milestone ->
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color.Black.copy(0.92f)),
+        ) {
+            com.saintnico.verdlyhabits.ui.components.social.DuoMilestoneCelebration(
+                milestone = milestone,
+                onDismiss = { duoMilestone = null },
+                onShare = {
+                    com.saintnico.verdlyhabits.ui.components.share.shareDuoMilestoneCard(
+                        context = context,
+                        streakDays = milestone.streakDays,
+                        buddyUsername = milestone.buddyUsername,
+                    )
+                    duoMilestone = null
+                },
+            )
+        }
+    }
+
+    LaunchedEffect(duoBroken) {
+        duoBroken?.let { broken ->
+            onShowNotification(
+                "Duo streak ended at ${broken.previousStreak} days with ${broken.buddyUsername}",
+                true,
+                Icons.Rounded.LocalFireDepartment,
+            )
+            duoBroken = null
+        }
     }
 
     ReferralShareSheet(

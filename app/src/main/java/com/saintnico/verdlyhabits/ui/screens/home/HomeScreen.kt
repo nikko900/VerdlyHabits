@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,23 +46,19 @@ import com.saintnico.verdlyhabits.audio.rememberAppSound
 import com.saintnico.verdlyhabits.data.remote.storage.StorageRepository
 import com.saintnico.verdlyhabits.domain.HabitCategory
 import com.saintnico.verdlyhabits.domain.HabitScheduling
-import com.saintnico.verdlyhabits.engine.MotivationalEngine
 import com.saintnico.verdlyhabits.ui.components.BurstIntensity
 import com.saintnico.verdlyhabits.ui.components.CelebrationKonfetti
 import com.saintnico.verdlyhabits.ui.components.DashboardProgressRing
 import com.saintnico.verdlyhabits.ui.components.HabitSwipeCard
 import com.saintnico.verdlyhabits.ui.components.MiniHeatmapStrip
 import com.saintnico.verdlyhabits.ui.components.MomentumBar
-import com.saintnico.verdlyhabits.ui.components.PremiumInsightCard
 import com.saintnico.verdlyhabits.ui.components.StreakFlame
-import com.saintnico.verdlyhabits.ui.components.WavingHandIcon
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
 import com.saintnico.verdlyhabits.ui.components.notifications.NotificationBellButton
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralPromoBanner
-import com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakState
-import com.saintnico.verdlyhabits.ui.components.social.DuoStreakCard
+import com.saintnico.verdlyhabits.ui.components.social.DuoHubButton
 import com.saintnico.verdlyhabits.ui.viewmodel.ReferralUiState
 import com.saintnico.verdlyhabits.monetization.PaywallTrigger
 import com.saintnico.verdlyhabits.ui.components.share.shareStreakCardWithImage
@@ -111,9 +106,9 @@ fun HomeScreen(
     referralState: ReferralUiState = ReferralUiState(),
     onOpenReferral: () -> Unit = {},
     onDismissReferralBanner: () -> Unit = {},
-    duoState: DuoStreakState? = null,
-    onAcceptDuoInvite: (String) -> Unit = {},
-    onDeclineDuoInvite: (String) -> Unit = {},
+    onNavigateToDuo: () -> Unit = {},
+    duoNeedsAttention: Boolean = false,
+    duoAtRisk: Boolean = false,
     notificationBadgeCount: Int = 0,
     onOpenNotifications: () -> Unit = {},
 ) {
@@ -162,12 +157,12 @@ fun HomeScreen(
 
     // ── Time / greeting ────────────────────────────────────────────────────
     val now = remember { LocalTime.now() }
-    val timeGreeting = remember(now) {
+    val (timeGreeting, greetingEmoji) = remember(now) {
         when (now.hour) {
-            in 5..11  -> "Good morning"
-            in 12..16 -> "Good afternoon"
-            in 17..21 -> "Good evening"
-            else      -> "Late night"
+            in 5..11  -> "Good morning" to "☕"
+            in 12..16 -> "Good afternoon" to "☀️"
+            in 17..21 -> "Good evening" to "🌙"
+            else      -> "Late night" to "🦉"
         }
     }
     val moodCopy = remember(visible, completionRate, totalStreak) {
@@ -518,17 +513,6 @@ fun HomeScreen(
                     }
                 }
 
-                duoState?.let { duo ->
-                    item {
-                        DuoStreakCard(
-                            state = duo,
-                            onAccept = { onAcceptDuoInvite(duo.pairId) },
-                            onDecline = { onDeclineDuoInvite(duo.pairId) },
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
-                    }
-                }
-
                 // ── Profile completion nudge ─────────────────────────────────
                 if (onNavigateToEditProfile != null) {
                     item {
@@ -553,16 +537,12 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        "$timeGreeting, $displayName.",
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    WavingHandIcon(size = 24.dp)
-                                }
+                                Text(
+                                    "$timeGreeting, $displayName.",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
                                 Text(
                                     moodCopy,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -570,6 +550,12 @@ fun HomeScreen(
                                 )
                             }
                             ShieldBadge(shieldCount)
+                            Spacer(Modifier.width(4.dp))
+                            DuoHubButton(
+                                onClick = onNavigateToDuo,
+                                glowing = duoNeedsAttention,
+                                atRisk = duoAtRisk,
+                            )
                             Spacer(Modifier.width(4.dp))
                             NotificationBellButton(
                                 unreadCount = notificationBadgeCount,
@@ -623,21 +609,10 @@ fun HomeScreen(
                     }
                 }
 
-                // ── Motivational insight card ──────────────────────────────
+                // ── Insight card ───────────────────────────────────────────
                 if (!insightDismissed && visible.isNotEmpty()) {
                     item {
-                        val insight = remember(visible, totalStreak) {
-                            MotivationalEngine.topInsight(
-                                habits = visible,
-                                longestStreakEver = totalStreak,
-                                totalCompletions = statsState?.value?.totalCompletions ?: 0,
-                                totalXp = statsState?.value?.totalXp ?: 0
-                            )
-                        }
-                        PremiumInsightCard(
-                            insight = insight,
-                            onDismiss = { insightDismissed = true }
-                        )
+                        InsightCard(text = dailyInsight, onDismiss = { insightDismissed = true })
                     }
                 }
 
@@ -679,16 +654,8 @@ fun HomeScreen(
                             highlight = activeFiltered.isEmpty() && completedFiltered.isNotEmpty()
                         )
                     }
-                    itemsIndexed(activeFiltered, key = { _, h -> h.id }) { index, habit ->
+                    items(activeFiltered, key = { it.id }) { habit ->
                         val isAtRisk = now.hour >= 21 && habit.streak > 7
-                        // Staggered entrance animation
-                        val entryAlpha = remember { Animatable(0f) }
-                        val entryOffset = remember { Animatable(24f) }
-                        LaunchedEffect(habit.id) {
-                            delay(index * 40L)
-                            launch { entryAlpha.animateTo(1f, tween(350)) }
-                            entryOffset.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 300f))
-                        }
                         HabitSwipeCard(
                             habit = habit,
                             isAtRisk = isAtRisk,
@@ -699,10 +666,6 @@ fun HomeScreen(
                             onFocusTap = {
                                 selectedHabitForTimer = habit
                                 showTimePicker = true
-                            },
-                            modifier = Modifier.graphicsLayer {
-                                alpha = entryAlpha.value
-                                translationY = entryOffset.value
                             }
                         )
                     }
@@ -939,26 +902,6 @@ fun HomeScreen(
     }
 
     // Paywall is hosted at the navigation root (ModalBottomSheet).
-    
-    // ── Trophy Unlock Ceremony ───────────────────────────────────────────────
-    val newlyUnlocked = statsState?.value?.newlyUnlocked
-    if (newlyUnlocked != null) {
-        com.saintnico.verdlyhabits.ui.components.TrophyUnlockCeremony(
-            achievement = newlyUnlocked,
-            haptics = haptics,
-            sound = sound,
-            onDismiss = { userStatsViewModel?.clearNewlyUnlocked() },
-            onShare = {
-                userStatsViewModel?.clearNewlyUnlocked()
-                // You could share a beautiful image here
-                com.saintnico.verdlyhabits.ui.components.share.shareStreakCardWithImage(
-                    context,
-                    headline = "Trophy Unlocked",
-                    habitName = newlyUnlocked.title,
-                )
-            }
-        )
-    }
 }
 
 // ── Sub-composables ──────────────────────────────────────────────────────────
@@ -1354,4 +1297,5 @@ private fun registerCompletionFx(
         onClearFlash()
     }
 }
+
 

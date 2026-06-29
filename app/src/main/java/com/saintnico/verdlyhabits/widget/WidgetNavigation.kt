@@ -10,6 +10,7 @@ object WidgetNavigation {
 
     const val ROUTE_HOME = "home"
     const val ROUTE_CHALLENGES = "challenges"
+    const val ROUTE_DUO = "duo"
 
     fun openAppIntent(context: Context, route: String, challengeId: String? = null): Intent =
         Intent(context, MainActivity::class.java).apply {

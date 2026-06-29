@@ -83,6 +83,24 @@ object SocialNotificationDispatcher {
         )
     }
 
+    suspend fun notifyDuoBuddyDone(
+        targetUid: String,
+        fromUsername: String,
+        pairId: String,
+        streakDays: Int,
+    ) {
+        val name = fromUsername.ifBlank { "Your buddy" }
+        val body = "$name finished today — don't break the ${streakDays.coerceAtLeast(1)}-day duo streak!"
+        queuePush(
+            targetUid = targetUid,
+            type = "duo_buddy_done",
+            title = "Duo streak — your turn",
+            body = body,
+            challengeId = "",
+            data = mapOf("route" to "home", "referenceId" to pairId),
+        )
+    }
+
     private suspend fun deliver(
         targetUid: String,
         type: InboxNotificationType,
@@ -97,7 +115,7 @@ object SocialNotificationDispatcher {
     ) {
         if (targetUid.isBlank()) return
         val actorUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-        inbox.writeNotification(
+        val write = inbox.writeNotification(
             targetUid = targetUid,
             notification = InboxNotification(
                 id = referenceId,
@@ -112,6 +130,9 @@ object SocialNotificationDispatcher {
                 actionState = "pending",
             ),
         )
+        if (write.isFailure) {
+            Log.w(TAG, "inbox write failed (${type.name}): ${write.exceptionOrNull()?.message}")
+        }
         queuePush(targetUid, pushType, title, body, challengeId.orEmpty(), pushData)
     }
 

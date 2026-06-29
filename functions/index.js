@@ -1,6 +1,6 @@
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
@@ -81,16 +81,46 @@ async function tokensFor(uid) {
   return { tokens: [...set], name: u.username || u.displayName || "Rival" };
 }
 
-async function push(uid, { title, body, type, challengeId, proofKey }) {
+async function profileFor(uid) {
+  const snap = await db.collection("users").doc(uid).get();
+  if (!snap.exists) return { username: "rival", photoUrl: null };
+  const u = snap.data() || {};
+  return {
+    username: u.username || u.displayName || "rival",
+    photoUrl: u.photoUrl || null,
+  };
+}
+
+async function writeInbox(targetUid, itemId, payload) {
+  if (!targetUid || !itemId || !payload) return;
+  const data = {
+    type: payload.type,
+    title: payload.title,
+    body: payload.body,
+    actorUid: payload.actorUid || "",
+    actorUsername: payload.actorUsername || "",
+    referenceId: payload.referenceId || itemId,
+    read: false,
+    actionState: "pending",
+    createdAt: FieldValue.serverTimestamp(),
+  };
+  if (payload.actorPhotoUrl) data.actorPhotoUrl = payload.actorPhotoUrl;
+  if (payload.challengeId) data.challengeId = payload.challengeId;
+  await db.collection("users").doc(targetUid).collection("inbox").doc(itemId).set(data, { merge: true });
+}
+
+async function push(uid, { title, body, type, challengeId, proofKey, route, referenceId }) {
   if (!uid) return;
   const { tokens } = await tokensFor(uid);
   if (!tokens.length) return;
+  const social = ["friend_request", "duo_invite", "arena_invite"].includes(String(type || ""));
   const message = {
     notification: { title, body },
     data: {
       type: String(type || "general"),
       challengeId: String(challengeId || ""),
-      route: "challenges",
+      route: String(route || (social ? "notifications" : "challenges")),
+      referenceId: String(referenceId || ""),
       proofKey: String(proofKey || ""),
     },
     android: {
@@ -124,6 +154,12 @@ function channelFor(type) {
     case "proof_posted":
     case "reaction_received":
       return "verdly_social";
+    case "friend_request":
+    case "duo_invite":
+    case "arena_invite":
+    case "duo_buddy_done":
+    case "duo_milestone":
+      return "verdly_connections";
     default:
       return "verdly_challenges";
   }
@@ -262,11 +298,219 @@ exports.onChallengeActivity = onDocumentCreated(
 exports.dispatchQueuedNotification = onDocumentCreated("notificationQueue/{id}", async (event) => {
   const payload = event.data?.data();
   if (!payload || !payload.targetUid) return;
+  const extra = (payload.data && typeof payload.data === "object") ? payload.data : {};
   await push(payload.targetUid, {
     title: payload.title || "Verdly Challenge",
     body: payload.body || "Something happened in your challenge",
     type: payload.type || "general",
     challengeId: payload.challengeId || "",
-    proofKey: (payload.data && payload.data.proofKey) || "",
+    proofKey: extra.proofKey || "",
+    route: extra.route || "",
+    referenceId: extra.referenceId || "",
   });
+});
+
+exports.onDuoStreakProgress = onDocumentUpdated("duoStreaks/{pairId}", async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after || after.status !== "active") return;
+
+  const members = members(after.members);
+  if (members.length < 2) return;
+
+  const progressBefore = before.memberProgress || {};
+  const progressAfter = after.memberProgress || {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const uid of members) {
+    const buddyUid = members.find((m) => m !== uid);
+    if (!buddyUid) continue;
+    const wasDone =
+      progressBefore[uid]?.date === today && progressBefore[uid]?.allDone === true;
+    const nowDone =
+      progressAfter[uid]?.date === today && progressAfter[uid]?.allDone === true;
+    const buddyDone =
+      progressAfter[buddyUid]?.date === today && progressAfter[buddyUid]?.allDone === true;
+
+    if (!wasDone && nowDone && buddyDone) {
+      const profile = progressAfter[uid]?.username
+        ? { username: progressAfter[uid].username }
+        : await profileFor(uid);
+      const name = profile.username || "Your buddy";
+      const streak = after.streakDays || 0;
+      await push(buddyUid, {
+        title: "Duo streak — your turn",
+        body: `${name} finished today — don't break the ${Math.max(streak, 1)}-day duo streak!`,
+        type: "duo_buddy_done",
+        route: "duo",
+        referenceId: event.params.pairId,
+      });
+    }
+  }
+
+  const streakBefore = before.streakDays || 0;
+  const streakAfter = after.streakDays || 0;
+  if (streakAfter > streakBefore && [3, 7, 14, 21, 30].includes(streakAfter)) {
+    const title = `Duo streak: ${streakAfter} days!`;
+    for (const uid of members) {
+      await push(uid, {
+        title,
+        body: "You and your buddy hit a milestone — open Verdly to celebrate.",
+        type: "duo_milestone",
+        route: "home",
+        referenceId: event.params.pairId,
+      });
+    }
+  }
+});
+
+// ── 4. Social inbox + push (source of truth for connections notifications) ─
+
+exports.onFriendRequestCreated = onDocumentCreated("friendRequests/{requestId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.status !== "pending") return;
+  const fromUid = data.fromUid;
+  const toUid = data.toUid;
+  if (!fromUid || !toUid || fromUid === toUid) return;
+
+  const requestId = event.params.requestId;
+  const profile = await profileFor(fromUid);
+  const username = profile.username;
+  const body = `@${username} wants to connect on Verdly`;
+
+  await writeInbox(toUid, requestId, {
+    type: "FRIEND_REQUEST",
+    title: "New friend request",
+    body,
+    actorUid: fromUid,
+    actorUsername: username,
+    actorPhotoUrl: profile.photoUrl,
+    referenceId: requestId,
+  });
+  await push(toUid, {
+    title: "New friend request",
+    body,
+    type: "friend_request",
+    route: "notifications",
+    referenceId: requestId,
+  });
+});
+
+exports.onDuoStreakInviteCreated = onDocumentCreated("duoStreaks/{pairId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.status !== "pending") return;
+  const invitedBy = data.invitedBy;
+  const memberUids = members(data.members);
+  const targetUid = memberUids.find((uid) => uid && uid !== invitedBy);
+  if (!invitedBy || !targetUid) return;
+
+  const pairId = event.params.pairId;
+  const profiles = data.memberProfiles || {};
+  const inviterProfile = profiles[invitedBy] || {};
+  const fallback = await profileFor(invitedBy);
+  const username = inviterProfile.username || fallback.username;
+  const photoUrl = inviterProfile.photoUrl || fallback.photoUrl;
+  const body = `@${username} invited you to a duo streak`;
+
+  await writeInbox(targetUid, pairId, {
+    type: "DUO_INVITE",
+    title: "Accountability buddy invite",
+    body,
+    actorUid: invitedBy,
+    actorUsername: username,
+    actorPhotoUrl: photoUrl,
+    referenceId: pairId,
+  });
+  await push(targetUid, {
+    title: "Accountability buddy invite",
+    body,
+    type: "duo_invite",
+    route: "duo",
+    referenceId: pairId,
+  });
+});
+
+exports.onChallengeJoinRequestCreated = onDocumentCreated("challengeJoinRequests/{requestId}", async (event) => {
+  const data = event.data?.data();
+  if (!data || data.status !== "pending") return;
+  const hostUid = data.hostUid;
+  const fromUid = data.fromUid;
+  if (!hostUid || !fromUid) return;
+
+  const requestId = event.params.requestId;
+  const profile = await profileFor(fromUid);
+  const username = data.fromUsername || profile.username;
+  const challengeTitle = data.challengeTitle || "your arena";
+  const body = `@${username} wants to join "${challengeTitle}"`;
+
+  await writeInbox(hostUid, requestId, {
+    type: "ARENA_INVITE",
+    title: "Arena join request",
+    body,
+    actorUid: fromUid,
+    actorUsername: username,
+    actorPhotoUrl: profile.photoUrl,
+    referenceId: requestId,
+    challengeId: data.challengeId || "",
+  });
+  await push(hostUid, {
+    title: "Arena join request",
+    body,
+    type: "arena_invite",
+    challengeId: data.challengeId || "",
+    route: "notifications",
+    referenceId: requestId,
+  });
+});
+
+exports.onDuoStreakProgress = onDocumentUpdated("duoStreaks/{pairId}", async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after || after.status !== "active") return;
+
+  const memberUids = members(after.members);
+  if (memberUids.length < 2) return;
+
+  const progressBefore = before.memberProgress || {};
+  const progressAfter = after.memberProgress || {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const uid of memberUids) {
+    const buddyUid = memberUids.find((m) => m !== uid);
+    if (!buddyUid) continue;
+    const wasDone =
+      progressBefore[uid]?.date === today && progressBefore[uid]?.allDone === true;
+    const nowDone =
+      progressAfter[uid]?.date === today && progressAfter[uid]?.allDone === true;
+    const buddyWasDone =
+      progressBefore[buddyUid]?.date === today && progressBefore[buddyUid]?.allDone === true;
+
+    if (!wasDone && nowDone && buddyWasDone) {
+      const profile = await profileFor(uid);
+      const name = profile.username || "Your buddy";
+      const streak = after.streakDays || 0;
+      await push(buddyUid, {
+        title: "Duo streak — your turn",
+        body: `${name} finished today — don't break the ${Math.max(streak, 1)}-day duo streak!`,
+        type: "duo_buddy_done",
+        route: "home",
+        referenceId: event.params.pairId,
+      });
+    }
+  }
+
+  const streakBefore = before.streakDays || 0;
+  const streakAfter = after.streakDays || 0;
+  if (streakAfter > streakBefore && [3, 7, 14, 21, 30].includes(streakAfter)) {
+    const title = `Duo streak: ${streakAfter} days!`;
+    for (const uid of memberUids) {
+      await push(uid, {
+        title,
+        body: "You and your buddy hit a milestone — open Verdly to celebrate.",
+        type: "duo_milestone",
+        route: "home",
+        referenceId: event.params.pairId,
+      });
+    }
+  }
 });

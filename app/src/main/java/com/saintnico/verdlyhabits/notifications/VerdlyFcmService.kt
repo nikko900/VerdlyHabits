@@ -66,7 +66,16 @@ class VerdlyFcmService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("notification_type", type)
             when {
-                type in setOf("friend_request", "duo_invite", "arena_invite") || route == "notifications" -> {
+                route == WidgetNavigation.ROUTE_DUO ||
+                    type == "duo_buddy_done" ||
+                    type == "duo_milestone" ||
+                    type == "duo_invite" -> {
+                    putExtra("open_duo", true)
+                }
+                route == "home" -> {
+                    putExtra(com.saintnico.verdlyhabits.widget.WidgetNavigation.EXTRA_ROUTE, com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_HOME)
+                }
+                type in setOf("friend_request", "arena_invite") || route == "notifications" -> {
                     putExtra("open_notifications", true)
                 }
                 else -> {
@@ -102,13 +111,20 @@ class VerdlyFcmService : FirebaseMessagingService() {
     private fun channelFor(type: String): String = when (type) {
         "took_lead", "overtaken", "climbed" -> CHANNEL_LEADERBOARD
         "proof_posted", "reaction_received" -> CHANNEL_SOCIAL
-        "friend_request", "duo_invite", "arena_invite" -> CHANNEL_CONNECTIONS
+        "friend_request", "duo_invite", "arena_invite", "duo_buddy_done", "duo_milestone" -> CHANNEL_CONNECTIONS
         else -> CHANNEL_CHALLENGES
     }
 
     private fun createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_CONNECTIONS,
+                "Connections",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply { description = "Friend requests, duo streak invites, and arena requests" }
+        )
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_LEADERBOARD,

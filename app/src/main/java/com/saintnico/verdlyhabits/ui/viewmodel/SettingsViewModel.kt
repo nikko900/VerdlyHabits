@@ -136,6 +136,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         initialValue = true,
     )
 
+    val equippedTitleId = themePreference.equippedTitleId.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null,
+    )
+
     private val _isSaving = MutableStateFlow(false)
     val isSaving = _isSaving.asStateFlow()
     
@@ -165,6 +171,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 userRepository.setShowRecentProof(value)
             } catch (_: Exception) {
                 // Local mirror already updated; Firestore will re-sync on next profile pull.
+            }
+        }
+    }
+
+    fun setEquippedTitleId(titleId: String?, titleLabel: String? = null) {
+        viewModelScope.launch {
+            themePreference.setEquippedTitleId(titleId)
+            try {
+                userRepository.setEquippedTitle(titleId, titleLabel)
+            } catch (_: Exception) {
+                // Local mirror already updated.
             }
         }
     }

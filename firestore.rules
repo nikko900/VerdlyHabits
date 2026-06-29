@@ -44,6 +44,16 @@ service cloud.firestore {
           && request.resource.data.title is string
           && request.resource.data.body is string;
       }
+
+      // Profile tab: friend profile views this week (Pro insight).
+      match /profileViews/{viewerUid} {
+        allow read: if signedIn() && uid() == userId;
+        allow create, update: if signedIn()
+          && uid() == viewerUid
+          && request.resource.data.viewerUid == uid()
+          && request.resource.data.weekKey is string;
+        allow delete: if false;
+      }
     }
 
     // --- friendRequests: Connect / friends (doc id: {fromUid}_{toUid}) ---

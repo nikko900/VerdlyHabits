@@ -91,6 +91,7 @@ import com.saintnico.verdlyhabits.ui.components.social.ReportUserSheet
 import com.saintnico.verdlyhabits.R
 import androidx.compose.ui.res.painterResource
 import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.ProfileSocialViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.SettingsViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -131,6 +132,7 @@ fun MemberProfileScreen(
     var spotlight by remember { mutableStateOf<Challenge?>(null) }
     val scope = rememberCoroutineScope()
     val settingsViewModel: SettingsViewModel = viewModel()
+    val profileSocialViewModel: ProfileSocialViewModel = viewModel()
     val myUsername by settingsViewModel.userUsername.collectAsState()
     var joinRequestPending by remember { mutableStateOf(false) }
     var showReportSheet by remember { mutableStateOf(false) }
@@ -166,6 +168,14 @@ fun MemberProfileScreen(
             profile = null
         } finally {
             loading = false
+        }
+    }
+
+    LaunchedEffect(memberUid, me, profile?.uid) {
+        if (memberUid.isNotBlank() && me.isNotBlank() && me != memberUid && profile != null) {
+            runCatching {
+                profileSocialViewModel.recordProfileView(memberUid)
+            }
         }
     }
 
@@ -306,6 +316,7 @@ fun MemberProfileScreen(
                     )
                 }
                 val titleColor = tierColor(signature.tier)
+                val displayEquippedTitle = p.equippedTitleLabel?.takeIf { it.isNotBlank() } ?: signature.label
                 val highlights = remember(sharedChallenges, memberUid) {
                     collectHighlights(sharedChallenges, memberUid)
                 }
@@ -340,7 +351,7 @@ fun MemberProfileScreen(
                                     xp = p.xp,
                                     levelTitle = levelTitle,
                                     accent = memberAccent,
-                                    equippedTitle = signature.label,
+                                    equippedTitle = displayEquippedTitle,
                                     equippedTitleColor = titleColor,
                                 )
                             }

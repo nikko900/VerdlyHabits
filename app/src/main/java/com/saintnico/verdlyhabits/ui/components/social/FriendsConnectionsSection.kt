@@ -66,6 +66,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.input.ImeAction
 import com.saintnico.verdlyhabits.ui.components.social.ReportUserSheet
 
+import com.saintnico.verdlyhabits.ui.viewmodel.ReferralUiState
+import com.saintnico.verdlyhabits.ui.components.referral.ReferralPromoBanner
+
 /** High-contrast tokens for the always-dark connections shell (readable in light + dark app themes). */
 private object ConnectionsShellColors {
     val accent = Color(0xFF74C69D)
@@ -89,7 +92,9 @@ fun FriendsConnectionsSection(
     hasDuoBuddy: Boolean = false,
     myUsername: String = "",
     myPhotoUrl: String? = null,
-    onInviteAccountabilityBuddy: ((uid: String, username: String, photoUrl: String?) -> Unit)? = null,
+    onInviteAccountabilityBuddy: ((uid: String, username: String, photoUrl: String?, onResult: (Boolean, String?) -> Unit) -> Unit)? = null,
+    referralState: ReferralUiState = ReferralUiState(),
+    onOpenReferral: () -> Unit = {},
 ) {
     val incoming by friendsViewModel.incomingRequestsUi.collectAsState()
     val joinRequests by friendsViewModel.pendingChallengeJoinRequests.collectAsState()
@@ -128,6 +133,18 @@ fun FriendsConnectionsSection(
             color = onBg.copy(alpha = 0.55f),
         )
         Spacer(Modifier.height(12.dp))
+
+        if (referralState.showBanner) {
+            ReferralPromoBanner(
+                qualifiedCount = referralState.qualifiedCount,
+                friendsRequired = referralState.friendsRequired,
+                rewardDays = referralState.rewardDays,
+                onOpen = onOpenReferral,
+                onDismiss = {}, // We don't dismiss it here, keep it compact
+                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 12.dp)
+            )
+        }
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -365,9 +382,16 @@ fun FriendsConnectionsSection(
                     friends.forEach { f ->
                         OutlinedButton(
                             onClick = {
-                                onInviteAccountabilityBuddy?.invoke(f.uid, f.username, f.photoUrl)
-                                onShowNotification("Duo streak invite sent to @${f.username}", false)
-                                showBuddyPicker = false
+                                onInviteAccountabilityBuddy?.invoke(f.uid, f.username, f.photoUrl) { ok, err ->
+                                    if (ok) {
+                                        onShowNotification("Duo streak invite sent to @${f.username}", false)
+                                        showBuddyPicker = false
+                                    } else {
+                                        onShowNotification(err ?: "Couldn't send duo invite", true)
+                                    }
+                                } ?: run {
+                                    showBuddyPicker = false
+                                }
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -641,3 +665,4 @@ private fun AvatarCircle(photoUrl: String?, label: String, primary: Color, size:
         }
     }
 }
+

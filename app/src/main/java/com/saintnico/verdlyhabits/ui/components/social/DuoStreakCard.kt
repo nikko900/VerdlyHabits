@@ -1,10 +1,26 @@
 package com.saintnico.verdlyhabits.ui.components.social
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,8 +28,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,82 +42,467 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
+import com.saintnico.verdlyhabits.R
+import com.saintnico.verdlyhabits.data.remote.firestore.DuoMilestoneReached
 import com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakState
+import com.saintnico.verdlyhabits.engine.DuoStreakEngine
+import com.saintnico.verdlyhabits.engine.GamificationEngine
+import com.saintnico.verdlyhabits.ui.components.BurstIntensity
+import com.saintnico.verdlyhabits.ui.components.CelebrationKonfetti
 import com.saintnico.verdlyhabits.ui.theme.dmSansFamily
 import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
+import kotlinx.coroutines.delay
 
 private val Mint = Color(0xFF52B788)
 private val Shell = Color(0xFF0F1A14)
+private val ShellDeep = Color(0xFF132A1F)
+private val Gold = Color(0xFFFFE8A3)
+private val RiskAmber = Color(0xFFFFB300)
+private val RiskRed = Color(0xFFFF6B6B)
+private val RiskShell = Color(0xFF2A1510)
+
+@Composable
+fun DuoMilestoneCelebration(
+    milestone: DuoMilestoneReached,
+    onDismiss: () -> Unit,
+    onShare: () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    val cardScale = remember { Animatable(0.6f) }
+    val titleAlpha = remember { Animatable(0f) }
+    val bodyAlpha = remember { Animatable(0f) }
+    val buttonsAlpha = remember { Animatable(0f) }
+  val xpTarget = GamificationEngine.duoMilestoneXp(milestone.streakDays)
+    var xpTick by remember(milestone) { mutableIntStateOf(0) }
+    val animatedXp by animateIntAsState(xpTarget, tween(900, easing = FastOutSlowInEasing), label = "xp")
+    val konfettiKey = remember(milestone) { System.currentTimeMillis() }
+
+    val celebrationComp by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.duo_celebration))
+    val celebrationProgress by animateLottieCompositionAsState(
+        composition = celebrationComp,
+        iterations = LottieConstants.IterateForever,
+        speed = 1.1f,
+    )
+
+    LaunchedEffect(milestone) {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        cardScale.snapTo(0.6f)
+        titleAlpha.snapTo(0f)
+        bodyAlpha.snapTo(0f)
+        buttonsAlpha.snapTo(0f)
+        xpTick = 0
+        cardScale.animateTo(1f, spring(dampingRatio = 0.52f, stiffness = 340f))
+        delay(80)
+        titleAlpha.animateTo(1f, tween(420))
+        delay(120)
+        bodyAlpha.animateTo(1f, tween(380))
+        delay(100)
+        xpTick = xpTarget
+        buttonsAlpha.animateTo(1f, tween(360))
+        delay(60)
+        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        CelebrationKonfetti(trigger = konfettiKey, intensity = BurstIntensity.HUGE)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0xFF1A3D2E), Color.Black.copy(0.94f)),
+                        radius = 900f,
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                LottieAnimation(
+                    composition = celebrationComp,
+                    progress = { celebrationProgress },
+                    modifier = Modifier.size(220.dp),
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .scale(cardScale.value)
+                        .graphicsLayer { alpha = titleAlpha.value },
+                ) {
+                    Text(
+                        DuoStreakEngine.milestoneTitle(milestone.streakDays),
+                        fontFamily = frauncesFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 30.sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                DuoStreakEngine.milestoneSubtitle(milestone.streakDays, milestone.buddyUsername),
+                fontFamily = dmSansFamily,
+                fontSize = 15.sp,
+                color = Color.White.copy(0.78f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.graphicsLayer { alpha = bodyAlpha.value },
+            )
+            if (xpTarget > 0) {
+                Spacer(Modifier.height(14.dp))
+                AnimatedVisibility(
+                    visible = xpTick > 0,
+                    enter = scaleIn(spring(dampingRatio = 0.45f)) + fadeIn(),
+                ) {
+                    Text(
+                        "+$animatedXp XP",
+                        fontFamily = dmSansFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        color = Mint,
+                    )
+                }
+            }
+            Spacer(Modifier.height(28.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.graphicsLayer { alpha = buttonsAlpha.value },
+            ) {
+                OutlinedButton(onClick = onDismiss) {
+                    Text("Keep going", fontFamily = dmSansFamily)
+                }
+                Button(
+                    onClick = onShare,
+                    colors = ButtonDefaults.buttonColors(containerColor = Mint),
+                ) {
+                    Icon(Icons.Rounded.Share, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Share", fontFamily = dmSansFamily, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DuoStreakBrokenBanner(
+    previousStreak: Int,
+    buddyName: String,
+    onDismiss: () -> Unit,
+    visible: Boolean = true,
+) {
+    val shake = remember { Animatable(0f) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            repeat(3) {
+                shake.animateTo(4f, tween(50))
+                shake.animateTo(-4f, tween(50))
+            }
+            shake.animateTo(0f, tween(80))
+        }
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically { it / 2 } + fadeIn(tween(400)),
+        exit = slideOutVertically { -it / 3 } + fadeOut(tween(280)),
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(x = shake.value.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = RiskRed.copy(0.14f)),
+        ) {
+            Row(
+                Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = RiskRed,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer { alpha = 0.65f },
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Duo streak ended at ${previousStreak}d",
+                        fontFamily = frauncesFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = Color.White,
+                    )
+                    Text(
+                        "You and $buddyName missed a day. Start fresh today.",
+                        fontFamily = dmSansFamily,
+                        fontSize = 12.sp,
+                        color = Color.White.copy(0.7f),
+                    )
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("OK", color = Mint, fontFamily = dmSansFamily)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun DuoStreakCard(
     state: DuoStreakState,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
+    onApplyGrace: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val infinite = rememberInfiniteTransition(label = "duo_pulse")
+    val accent = if (state.streakAtRisk) RiskAmber else Mint
+    val haptic = LocalHapticFeedback.current
+    val infinite = rememberInfiniteTransition(label = "duo_ambient")
     val pulse by infinite.animateFloat(
-        initialValue = 0.92f,
+        initialValue = 0.94f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
-        label = "pulse",
+        animationSpec = infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "avatar_pulse",
+    )
+    val glowAlpha by infinite.animateFloat(
+        initialValue = 0.12f,
+        targetValue = if (state.streakAtRisk) 0.55f else 0.32f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Reverse),
+        label = "border_glow",
+    )
+    val shimmer by infinite.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "shield_shimmer",
+    )
+    val streakScale by animateFloatAsState(
+        targetValue = if (state.bothDoneToday) 1.18f else 1f,
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 420f),
+        label = "streak_pop",
+    )
+    val dayProgress = remember(state.countdownHours, state.countdownMinutes) {
+        val totalMins = 24 * 60
+        val left = state.countdownHours * 60 + state.countdownMinutes
+        (totalMins - left).toFloat() / totalMins.toFloat()
+    }
+    val countdownProgress by animateFloatAsState(dayProgress, tween(900, easing = FastOutSlowInEasing), label = "day_prog")
+
+    val flameComp by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.duo_fire))
+    val flameProgress by animateLottieCompositionAsState(
+        composition = flameComp,
+        iterations = LottieConstants.IterateForever,
+        speed = if (state.streakAtRisk) 1.35f else if (state.bothDoneToday) 0.85f else 1f,
     )
 
+    LaunchedEffect(state.bothDoneToday) {
+        if (state.bothDoneToday) {
+            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+        }
+    }
+
+    val showBuddyNudge = state.status == "active" &&
+        state.buddyDoneToday &&
+        !state.myDoneToday &&
+        !state.isIncomingInvite
+
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColors = when {
+        state.streakAtRisk -> if (isDark) listOf(Color(0xFF3E2723), Color(0xFF1A0F0F)) else listOf(Color(0xFFFFF3E0), Color(0xFFFFE0B2))
+        state.streakDays >= 30 -> if (isDark) listOf(Color(0xFF2E2207), Color(0xFF161102)) else listOf(Color(0xFFFFF8E1), Color(0xFFFFECB3)) // Legend (Gold)
+        state.streakDays >= 14 -> if (isDark) listOf(Color(0xFF150E28), Color(0xFF090614)) else listOf(Color(0xFFF3E5F5), Color(0xFFE1BEE7)) // Fortnight (Purple)
+        state.streakDays >= 7 -> if (isDark) listOf(Color(0xFF0D1B2A), Color(0xFF060D14)) else listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB)) // Week (Blue)
+        else -> if (isDark) listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant) else listOf(Color(0xFFE8F5E9), Color(0xFFC8E6C9)) // Default (Greenish)
+    }
+
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val stroke = 2.5.dp.toPx()
+                drawRoundRect(
+                    color = accent.copy(alpha = glowAlpha),
+                    size = Size(size.width + stroke, size.height + stroke),
+                    topLeft = Offset(-stroke / 2f, -stroke / 2f),
+                    cornerRadius = CornerRadius(24.dp.toPx()),
+                    style = Stroke(width = stroke),
+                )
+            },
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(listOf(Shell, Color(0xFF132A1F))),
+                    Brush.linearGradient(bgColors),
                     RoundedCornerShape(22.dp),
                 )
-                .border(1.dp, Mint.copy(0.28f), RoundedCornerShape(22.dp))
+                .border(1.dp, accent.copy(if (state.streakAtRisk) 0.5f else 0.28f), RoundedCornerShape(22.dp))
                 .padding(16.dp),
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.LocalFireDepartment, null, tint = Mint, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                        LottieAnimation(
+                            composition = flameComp,
+                            progress = { flameProgress },
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         "Duo streak",
                         fontFamily = frauncesFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.weight(1f))
                     if (state.status == "active") {
+                        AnimatedContent(
+                            targetState = state.streakDays,
+                            transitionSpec = {
+                                (scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()).togetherWith(
+                                    scaleOut() + fadeOut(),
+                                )
+                            },
+                            label = "streak_days",
+                        ) { days ->
+                            Text(
+                                "${days}d",
+                                modifier = Modifier.scale(streakScale),
+                                fontFamily = dmSansFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                color = Gold,
+                            )
+                        }
+                    }
+                }
+
+                if (state.status == "active" && !state.isIncomingInvite) {
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = { countdownProgress.coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = accent,
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(0.1f),
+                        strokeCap = StrokeCap.Round,
+                    )
+                    Spacer(Modifier.height(5.dp))
+                    Text(
+                        DuoStreakEngine.countdownLabel(state.countdownHours, state.countdownMinutes),
+                        fontFamily = dmSansFamily,
+                        fontSize = 11.sp,
+                        fontWeight = if (state.streakAtRisk) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (state.streakAtRisk) RiskAmber else MaterialTheme.colorScheme.onSurface.copy(0.7f),
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = showBuddyNudge,
+                    enter = slideInVertically { -it } + fadeIn(tween(380)),
+                    exit = slideOutVertically { -it } + fadeOut(),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "${state.streakDays}d",
+                            "${state.buddyUsername} just finished — don't break the streak!",
                             fontFamily = dmSansFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFFFFE8A3),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = RiskAmber,
+                        )
+                    }
+                }
+
+                if (state.streakAtRisk) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Streak at risk — finish all habits before midnight.",
+                        fontFamily = dmSansFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = RiskAmber,
+                    )
+                    if (state.graceAvailable && onApplyGrace != null) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onApplyGrace,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer { alpha = shimmer },
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Gold.copy(0.75f)),
+                        ) {
+                            Icon(Icons.Rounded.Shield, null, tint = Gold, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Use Pro streak shield", fontFamily = dmSansFamily, color = Gold, fontSize = 12.sp)
+                        }
+                    } else if (state.graceUsedThisWeek) {
+                        Text(
+                            "Pro shield used this week",
+                            fontFamily = dmSansFamily,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(0.45f),
                         )
                     }
                 }
@@ -111,7 +514,7 @@ fun DuoStreakCard(
                         "${state.buddyUsername} wants to be your accountability buddy.",
                         fontFamily = dmSansFamily,
                         fontSize = 13.sp,
-                        color = Color.White.copy(0.75f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(0.75f),
                     )
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -129,7 +532,6 @@ fun DuoStreakCard(
                 } else {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         DuoMemberColumn(
@@ -137,22 +539,42 @@ fun DuoStreakCard(
                             progress = state.myProgress,
                             done = state.myDoneToday,
                             photoUrl = null,
-                            pulse = if (!state.myDoneToday && state.buddyDoneToday) pulse else 1f,
+                            accent = accent,
+                            pulse = if (showBuddyNudge) pulse else 1f,
+                            modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            "vs",
-                            fontFamily = frauncesFamily,
-                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                            color = Color.White.copy(0.35f),
-                            fontSize = 14.sp,
+                        DuoSyncBridge(
+                            myDone = state.myDoneToday,
+                            buddyDone = state.buddyDoneToday,
+                            atRisk = state.streakAtRisk,
+                            modifier = Modifier.padding(horizontal = 4.dp),
                         )
                         DuoMemberColumn(
                             label = state.buddyUsername.ifBlank { "Buddy" },
                             progress = state.buddyProgress,
                             done = state.buddyDoneToday,
                             photoUrl = state.buddyPhotoUrl,
-                            pulse = 1f,
+                            accent = accent,
+                            pulse = if (state.buddyDoneToday && !state.myDoneToday) pulse else 1f,
+                            modifier = Modifier.weight(1f),
                         )
+                    }
+                    AnimatedVisibility(
+                        visible = state.bothDoneToday,
+                        enter = scaleIn(spring(dampingRatio = 0.55f)) + fadeIn(),
+                    ) {
+                        Column {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Both locked in today — streak grows at midnight.",
+                                fontFamily = dmSansFamily,
+                                fontSize = 12.sp,
+                                color = Mint,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                     if (state.status == "pending") {
                         Spacer(Modifier.height(10.dp))
@@ -163,7 +585,122 @@ fun DuoStreakCard(
                             color = Color(0xFF95D5B2),
                         )
                     }
+
+                    // Upcoming Milestone progress to keep them coming back
+                    if (state.status == "active" && !state.isIncomingInvite) {
+                        DuoUpcomingMilestoneSection(state.streakDays, accent)
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DuoUpcomingMilestoneSection(currentStreak: Int, accent: Color) {
+    val nextMilestone = DuoStreakEngine.CELEBRATION_MILESTONES.firstOrNull { it > currentStreak } ?: return
+    val prevMilestone = DuoStreakEngine.CELEBRATION_MILESTONES.lastOrNull { it <= currentStreak } ?: 0
+    val totalRequired = nextMilestone - prevMilestone
+    val currentProgress = currentStreak - prevMilestone
+    val fraction = if (totalRequired > 0) currentProgress.toFloat() / totalRequired.toFloat() else 0f
+    
+    Spacer(Modifier.height(18.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.15f))
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Gold.copy(alpha = 0.2f), Gold.copy(alpha = 0.05f))
+                        )
+                    )
+                    .border(1.dp, Gold.copy(alpha = 0.3f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Star, null, tint = Gold, modifier = Modifier.size(16.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Next Milestone: ${DuoStreakEngine.milestoneTitle(nextMilestone)}",
+                    fontFamily = dmSansFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = Gold,
+                    trackColor = Color.White.copy(alpha = 0.1f),
+                    strokeCap = StrokeCap.Round,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "${nextMilestone - currentStreak}d left",
+                fontFamily = dmSansFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = Gold.copy(alpha = 0.8f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DuoSyncBridge(
+    myDone: Boolean,
+    buddyDone: Boolean,
+    atRisk: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val accent = if (atRisk) RiskAmber else Mint
+    val target = when {
+        myDone && buddyDone -> 1f
+        myDone || buddyDone -> 0.55f
+        else -> 0.12f
+    }
+    val progress by animateFloatAsState(target, spring(dampingRatio = 0.65f), label = "sync_bridge")
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(0.12f)
+    Column(
+        modifier = modifier.width(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "vs",
+            fontFamily = frauncesFamily,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurface.copy(0.35f),
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+            val h = size.height
+            drawRoundRect(
+                color = trackColor,
+                size = Size(size.width, h),
+                cornerRadius = CornerRadius(h / 2f),
+            )
+            if (progress > 0f) {
+                drawRoundRect(
+                    brush = Brush.horizontalGradient(listOf(accent.copy(0.5f), accent)),
+                    size = Size(size.width * progress, h),
+                    cornerRadius = CornerRadius(h / 2f),
+                )
             }
         }
     }
@@ -175,36 +712,88 @@ private fun DuoMemberColumn(
     progress: String,
     done: Boolean,
     photoUrl: String?,
+    accent: Color,
     pulse: Float,
+    modifier: Modifier = Modifier,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val (completed, total) = remember(progress) { parseProgressFraction(progress) }
+    val ringProgress by animateFloatAsState(
+        if (total > 0) completed.toFloat() / total else 0f,
+        tween(700, easing = FastOutSlowInEasing),
+        label = "ring",
+    )
+    val checkScale by animateFloatAsState(
+        if (done) 1f else 0.85f,
+        spring(dampingRatio = 0.5f),
+        label = "check_pop",
+    )
+    val ringTrackColor = MaterialTheme.colorScheme.onSurface.copy(0.12f)
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            modifier = Modifier
-                .size((48 * pulse).dp)
-                .clip(CircleShape)
-                .background(Mint.copy(0.15f))
-                .border(1.dp, if (done) Mint else Mint.copy(0.3f), CircleShape),
             contentAlignment = Alignment.Center,
+            modifier = Modifier.size((56 * pulse).dp),
         ) {
-            if (photoUrl != null) {
-                AsyncImage(
-                    model = photoUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Crop,
+            Canvas(Modifier.fillMaxSize()) {
+                val stroke = 3.dp.toPx()
+                val diameter = size.minDimension - stroke
+                val topLeft = Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+                drawArc(
+                    color = ringTrackColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(diameter, diameter),
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
                 )
-            } else {
-                Icon(Icons.Rounded.Person, null, tint = Mint, modifier = Modifier.size(24.dp))
+                drawArc(
+                    color = accent,
+                    startAngle = -90f,
+                    sweepAngle = 360f * ringProgress.coerceIn(0f, 1f),
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = Size(diameter, diameter),
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(0.12f))
+                    .border(1.dp, if (done) accent else accent.copy(0.35f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (photoUrl != null) {
+                    AsyncImage(
+                        model = photoUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(Icons.Rounded.Person, null, tint = accent, modifier = Modifier.size(22.dp))
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(label, fontFamily = dmSansFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color.White)
-        Text(progress, fontFamily = dmSansFamily, fontSize = 11.sp, color = Color.White.copy(0.55f))
+        Text(label, fontFamily = dmSansFamily, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+        Text(progress, fontFamily = dmSansFamily, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(0.55f))
         Icon(
             if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-            null,
-            tint = if (done) Mint else Color.White.copy(0.35f),
-            modifier = Modifier.size(18.dp),
+            contentDescription = null,
+            tint = if (done) accent else MaterialTheme.colorScheme.onSurface.copy(0.35f),
+            modifier = Modifier
+                .size(18.dp)
+                .scale(checkScale),
         )
     }
+}
+
+private fun parseProgressFraction(progress: String): Pair<Int, Int> {
+    val parts = progress.split("/")
+    val done = parts.getOrNull(0)?.trim()?.toIntOrNull() ?: 0
+    val total = parts.getOrNull(1)?.trim()?.toIntOrNull()?.coerceAtLeast(1) ?: 1
+    return done to total
 }

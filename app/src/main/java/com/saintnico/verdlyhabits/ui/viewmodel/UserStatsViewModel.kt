@@ -140,6 +140,15 @@ class UserStatsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun awardDuoMilestoneXp(streakDays: Int) {
+        val xp = GamificationEngine.duoMilestoneXp(streakDays)
+        if (xp <= 0) return
+        viewModelScope.launch {
+            store.addXp(xp)
+            syncToCloud()
+        }
+    }
+
     private suspend fun syncToCloud() {
         try {
             userRepository.saveStats(

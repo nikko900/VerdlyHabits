@@ -92,15 +92,25 @@ import com.saintnico.verdlyhabits.ui.components.TrophyHallFramedCard
 import com.saintnico.verdlyhabits.ui.components.TrophyHallHeaderRow
 import com.saintnico.verdlyhabits.ui.components.TrophyHallProgressBar
 import com.saintnico.verdlyhabits.ui.components.TrophyRankChip
-import com.saintnico.verdlyhabits.ui.components.visualTierForAchievement
-import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsUiState
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
+import com.saintnico.verdlyhabits.engine.ProfileSocialEngine
+import com.saintnico.verdlyhabits.engine.ProfileTitleEngine
+import com.saintnico.verdlyhabits.util.DebugSessionLog
+import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileIdentityCard
+import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileSocialProofSection
+import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileTitlePickerSheet
+import com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakState
+import com.saintnico.verdlyhabits.ui.viewmodel.FriendSummary
+import com.saintnico.verdlyhabits.ui.viewmodel.ReferralUiState
+import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsUiState
 import com.saintnico.verdlyhabits.ui.components.notifications.NotificationBellButton
 import com.saintnico.verdlyhabits.ui.components.social.FriendsConnectionsSection
-import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
+import com.saintnico.verdlyhabits.ui.components.visualTierForAchievement
 import com.saintnico.verdlyhabits.ui.theme.DangerRed
 import com.saintnico.verdlyhabits.ui.theme.GoldColor
+import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -143,13 +153,21 @@ private val arenaThemes = listOf(
 fun AccountScreen(
     statsState: UserStatsUiState,
     activeChallenges: List<Challenge>,
+    allUserChallenges: List<Challenge>,
     userId: String,
     userName: String,
     userUsername: String,
     userPhotoUri: String?,
     userBio: String,
+    equippedTitleId: String?,
+    onEquipTitle: (titleId: String?, titleLabel: String?) -> Unit,
     billingViewModel: BillingViewModel,
     friendsViewModel: FriendsViewModel,
+    friendSummaries: List<FriendSummary>,
+    duoState: DuoStreakState?,
+    referralState: ReferralUiState,
+    weeklyProfileViews: Int,
+    hasPerfectWeek: Boolean,
     onNavigateToEditProfile: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAchievements: () -> Unit,
@@ -162,7 +180,7 @@ fun AccountScreen(
     hasDuoBuddy: Boolean = false,
     myUsername: String = "",
     myPhotoUrl: String? = null,
-    onInviteAccountabilityBuddy: ((uid: String, username: String, photoUrl: String?) -> Unit)? = null,
+    onInviteAccountabilityBuddy: ((uid: String, username: String, photoUrl: String?, onResult: (Boolean, String?) -> Unit) -> Unit)? = null,
     notificationBadgeCount: Int = 0,
     onOpenNotifications: () -> Unit = {},
 ) {
@@ -182,6 +200,18 @@ fun AccountScreen(
 
     var avatarEntered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { avatarEntered = true }
+
+    // #region agent log
+    LaunchedEffect(userId) {
+        DebugSessionLog.log(
+            location = "AccountScreen.kt:entry",
+            message = "AccountScreen opened",
+            hypothesisId = "H2",
+            data = mapOf("hasUserId" to userId.isNotBlank()),
+        )
+    }
+    // #endregion
+
     val avatarScale by animateFloatAsState(
         targetValue = if (avatarEntered) 1f else 0f,
         animationSpec = spring(
@@ -192,7 +222,81 @@ fun AccountScreen(
     )
 
     var badgeDetail by remember { mutableStateOf<Achievement?>(null) }
+    var showTitlePicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val titleSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val isPro by billingViewModel.isPro.collectAsState()
+    val career = remember(allUserChallenges, userId) {
+        ProfileSocialEngine.careerInputs(allUserChallenges, userId)
+    }
+    val signature = remember(career, statsState.level) {
+        ProfileTitleEngine.signatureTitle(
+            wins = career.wins,
+            podiums = career.podiums,
+            bestStreak = career.bestStreak,
+            totalShared = career.totalShared,
+            level = statsState.level,
+        )
+    }
+    val unlockedTitles = remember(
+        career, statsState.level, statsState.totalFocusMinutes, statsState.totalCompletions,
+        statsState.achievements, duoState, isPro, hasPerfectWeek, statsState.longestStreakEver,
+    ) {
+        ProfileTitleEngine.unlockedTitles(
+            wins = career.wins,
+            podiums = career.podiums,
+            bestStreak = career.bestStreak.coerceAtLeast(statsState.longestStreakEver),
+            totalShared = career.totalShared,
+            level = statsState.level,
+            duoStreakDays = duoState?.streakDays ?: 0,
+            totalFocusMinutes = statsState.totalFocusMinutes,
+            totalCompletions = statsState.totalCompletions,
+            isPro = isPro,
+            achievements = statsState.achievements,
+        )
+    }
+    val equippedTitle = remember(equippedTitleId, unlockedTitles, signature) {
+        ProfileTitleEngine.resolveEquipped(equippedTitleId, unlockedTitles, signature)
+    }
+    val socialSnapshot = remember(
+        userId, userName, statsState.memberSince, statsState.totalCompletions,
+        statsState.longestStreakEver, friendSummaries, duoState, allUserChallenges,
+        referralState.qualifiedCount, isPro, hasPerfectWeek,
+    ) {
+        runCatching {
+            ProfileSocialEngine.buildSnapshot(
+                userId = userId,
+                userName = userName,
+                memberSinceMillis = statsState.memberSince,
+                totalCompletions = statsState.totalCompletions,
+                longestStreak = statsState.longestStreakEver,
+                friends = friendSummaries,
+                duoState = duoState,
+                allChallenges = allUserChallenges,
+                referralsSent = referralState.qualifiedCount,
+                isPro = isPro,
+                hasPerfectWeek = hasPerfectWeek,
+            )
+        }.getOrElse {
+            ProfileSocialEngine.ProfileSocialSnapshot(
+                stats = ProfileSocialEngine.SocialStats(
+                    friendsCount = friendSummaries.size,
+                    duoStreakDays = duoState?.streakDays ?: 0,
+                    challengeWins = 0,
+                    referralsSent = referralState.qualifiedCount,
+                ),
+                peopleMotivatedToday = 0,
+                activityFeed = emptyList(),
+                flairs = emptyList(),
+                memberStoryLine = ProfileSocialEngine.memberStoryLine(
+                    statsState.memberSince,
+                    statsState.totalCompletions,
+                    statsState.longestStreakEver,
+                ),
+            )
+        }
+    }
 
     val memberMonthYear = remember(statsState.memberSince) {
         Instant.ofEpochMilli(statsState.memberSince)
@@ -208,7 +312,6 @@ fun AccountScreen(
         }
     }
 
-    val isPro by billingViewModel.isPro.collectAsState()
     val inBonus = com.saintnico.verdlyhabits.referral.ReferralManager.isInBonusPeriod(context)
     val proSubtitle = when {
         isPro -> "Full Pro access on this device"
@@ -230,16 +333,23 @@ fun AccountScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
-                ProfileWaveHeader(
+                ProfileIdentityCard(
                     primary = primary,
                     background = bg,
                     userName = userName,
                     userUsername = userUsername,
                     userPhotoUri = userPhotoUri,
                     bio = displayBio,
-                    avatarBorder = avatarBorder,
+                    level = statsState.level,
+                    levelTitle = statsState.levelTitle,
+                    levelProgress = statsState.progressToNextLevel,
+                    equippedTitle = equippedTitle,
+                    flairs = socialSnapshot.flairs,
+                    memberStoryLine = socialSnapshot.memberStoryLine,
                     avatarScale = avatarScale,
+                    avatarBorder = avatarBorder,
                     onEditClick = onNavigateToEditProfile,
+                    onOpenTitlePicker = { showTitlePicker = true },
                     notificationBadgeCount = notificationBadgeCount,
                     onOpenNotifications = onOpenNotifications,
                 )
@@ -286,6 +396,18 @@ fun AccountScreen(
                         StatColumn("${displayedCompletions}", "COMPLETIONS", primary, onBg)
                     }
                 }
+            }
+
+            item {
+                Spacer(Modifier.height(22.dp))
+                ProfileSocialProofSection(
+                    snapshot = socialSnapshot,
+                    weeklyProfileViews = weeklyProfileViews,
+                    isPro = isPro,
+                    primary = primary,
+                    onBg = onBg,
+                    onUnlockPro = onNavigateToSubscription,
+                )
             }
 
             item {
@@ -419,6 +541,23 @@ fun AccountScreen(
         }
     }
 
+    if (showTitlePicker) {
+        ProfileTitlePickerSheet(
+            unlockedTitles = unlockedTitles,
+            equippedId = equippedTitle.id,
+            sheetState = titleSheetState,
+            onDismiss = { showTitlePicker = false },
+            onSelect = { id, label ->
+                onEquipTitle(id, label)
+                showTitlePicker = false
+            },
+            onAuto = {
+                onEquipTitle(null, null)
+                showTitlePicker = false
+            },
+        )
+    }
+
     if (badgeDetail != null) {
         val a = badgeDetail!!
         ModalBottomSheet(
@@ -506,130 +645,6 @@ private fun StatColumn(value: String, label: String, primary: Color, onBg: Color
             color = onBg.copy(alpha = 0.5f),
             fontWeight = FontWeight.Medium
         )
-    }
-}
-
-@Composable
-private fun ProfileWaveHeader(
-    primary: Color,
-    background: Color,
-    userName: String,
-    userUsername: String,
-    userPhotoUri: String?,
-    bio: String,
-    avatarBorder: Color,
-    avatarScale: Float,
-    onEditClick: () -> Unit,
-    notificationBadgeCount: Int = 0,
-    onOpenNotifications: () -> Unit = {},
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp)
-            .drawBehind {
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        0f to primary.copy(alpha = 0.9f),
-                        1f to background
-                    )
-                )
-                val wave = Path().apply {
-                    val w = size.width
-                    val h = size.height
-                    moveTo(0f, h - 48f)
-                    quadraticBezierTo(w * 0.5f, h - 4f, w, h - 48f)
-                    lineTo(w, h)
-                    lineTo(0f, h)
-                    close()
-                }
-                drawPath(wave, background)
-            }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            NotificationBellButton(
-                unreadCount = notificationBadgeCount,
-                onClick = onOpenNotifications,
-                tint = Color.White.copy(alpha = 0.9f),
-                accent = Color.White,
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 36.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Box(
-                    modifier = Modifier
-                        .scale(avatarScale)
-                        .size(90.dp)
-                        .clip(CircleShape)
-                        .border(3.dp, avatarBorder, CircleShape)
-                        .background(Color.White.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!userPhotoUri.isNullOrBlank()) {
-                        AsyncImage(
-                            model = userPhotoUri,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Person,
-                            null,
-                            tint = Color.White,
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .offset(x = (-4).dp, y = 4.dp)
-                        .clip(CircleShape)
-                        .background(primary)
-                        .clickable(onClick = onEditClick),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                userName.ifBlank { "Verdly" },
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
-            )
-            Text(
-                if (userUsername.isNotBlank() && userUsername != "UnknownRival") "@$userUsername" else "@rival",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.7f)
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                bio,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f),
-                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 32.dp),
-                textAlign = TextAlign.Center
-            )
-        }
     }
 }
 

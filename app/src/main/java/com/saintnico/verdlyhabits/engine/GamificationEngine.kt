@@ -1,6 +1,7 @@
 package com.saintnico.verdlyhabits.engine
 
 import com.saintnico.verdlyhabits.domain.Difficulty
+import com.saintnico.verdlyhabits.engine.DuoStreakEngine
 
 object GamificationEngine {
 
@@ -32,6 +33,8 @@ object GamificationEngine {
         streak == 30 -> 500
         else -> 0
     }
+
+    fun duoMilestoneXp(streakDays: Int): Int = DuoStreakEngine.milestoneXp(streakDays)
 
     fun calculateLevel(totalXp: Int): Int {
         // XP thresholds grow: 100, 250, 500, 900, 1500, 2300 …

@@ -29,6 +29,8 @@ class ThemePreference(private val context: Context) {
         val LAST_USERNAME_EDIT_TIMESTAMP = androidx.datastore.preferences.core.longPreferencesKey("last_username_edit_timestamp")
         /** Public privacy: show the "Recent proof" highlight reel on my profile. */
         val SHOW_RECENT_PROOF = booleanPreferencesKey("show_recent_proof")
+        /** Equipped profile title id from [ProfileTitleEngine]. Empty = auto signature. */
+        val EQUIPPED_TITLE_ID = androidx.datastore.preferences.core.stringPreferencesKey("equipped_title_id")
         /** Device-level: intro slides seen; survives logout. */
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         /** First challenge arena explainer (reactions / scoring). */
@@ -78,6 +80,14 @@ class ThemePreference(private val context: Context) {
     val syncedVersion: Flow<Int> = context.dataStore.data.map { it[SYNCED_VERSION] ?: 0 }
     val lastUsernameEditTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_USERNAME_EDIT_TIMESTAMP] ?: 0L }
     val showRecentProof: Flow<Boolean> = context.dataStore.data.map { it[SHOW_RECENT_PROOF] ?: true }
+    val equippedTitleId: Flow<String?> = context.dataStore.data.map { it[EQUIPPED_TITLE_ID] }
+
+    suspend fun setEquippedTitleId(id: String?) {
+        context.dataStore.edit { prefs ->
+            if (id.isNullOrBlank()) prefs.remove(EQUIPPED_TITLE_ID)
+            else prefs[EQUIPPED_TITLE_ID] = id
+        }
+    }
 
     val goalDailyReminderEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[GOAL_DAILY_REMINDER_ENABLED] ?: true
@@ -209,6 +219,8 @@ class ThemePreference(private val context: Context) {
                 prefs[PROFILE_VERSION] = userDoc.getLong("profileVersion")?.toInt() ?: 0
                 prefs[LAST_USERNAME_EDIT_TIMESTAMP] = userDoc.getLong("lastUsernameEditTimestamp") ?: 0L
                 prefs[SHOW_RECENT_PROOF] = userDoc.getBoolean("showRecentProof") ?: true
+                userDoc.getString("equippedTitleId")?.let { prefs[EQUIPPED_TITLE_ID] = it }
+                    ?: prefs.remove(EQUIPPED_TITLE_ID)
             }
         } catch (_: Exception) {
             // Offline or rules error — keep cached profile.

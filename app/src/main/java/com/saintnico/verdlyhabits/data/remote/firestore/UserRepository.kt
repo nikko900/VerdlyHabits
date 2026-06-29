@@ -176,7 +176,24 @@ class UserRepository {
             level = level,
             xp = xp,
             showRecentProof = snap.getBoolean("showRecentProof") ?: true,
+            equippedTitleId = snap.getString("equippedTitleId"),
+            equippedTitleLabel = snap.getString("equippedTitleLabel"),
         )
+    }
+
+    suspend fun setEquippedTitle(titleId: String?, titleLabel: String?) {
+        val user = auth.currentUser ?: return
+        val data = hashMapOf<String, Any>()
+        if (titleId.isNullOrBlank()) {
+            data["equippedTitleId"] = com.google.firebase.firestore.FieldValue.delete()
+            data["equippedTitleLabel"] = com.google.firebase.firestore.FieldValue.delete()
+        } else {
+            data["equippedTitleId"] = titleId
+            if (!titleLabel.isNullOrBlank()) data["equippedTitleLabel"] = titleLabel
+        }
+        firestore.collection("users").document(user.uid)
+            .set(data, SetOptions.merge())
+            .await()
     }
 
     /** Toggle whether the public "Recent proof" highlight reel is visible to others. */
