@@ -121,6 +121,8 @@ fun MemberProfileScreen(
     friendsViewModel: FriendsViewModel,
     onBack: () -> Unit,
     onShowNotification: (String, Boolean, ImageVector?) -> Unit,
+    canInviteToDuo: Boolean = false,
+    onInviteToDuo: ((username: String, photoUrl: String?) -> Unit)? = null,
 ) {
     val me = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
     val userRepository = remember { UserRepository() }
@@ -398,6 +400,10 @@ fun MemberProfileScreen(
                         FriendActionRow(
                             relationship = relationship,
                             isSelf = me == memberUid,
+                            canInviteToDuo = canInviteToDuo && relationship == FriendRelationship.Friends,
+                            onInviteToDuo = onInviteToDuo?.let { invite ->
+                                { invite(p.username.ifBlank { "rival" }, p.photoUrl) }
+                            },
                             onConnect = {
                                 if (FirebaseAuth.getInstance().currentUser == null) {
                                     onShowNotification("Sign in with Google first.", true, null)
@@ -694,6 +700,8 @@ fun MemberProfileScreen(
 private fun FriendActionRow(
     relationship: FriendRelationship,
     isSelf: Boolean,
+    canInviteToDuo: Boolean = false,
+    onInviteToDuo: (() -> Unit)? = null,
     onConnect: () -> Unit,
     onAcceptIncoming: () -> Unit,
     onDeclineIncoming: () -> Unit,
@@ -704,18 +712,31 @@ private fun FriendActionRow(
         Column(Modifier.padding(horizontal = 16.dp)) {
             when (relationship) {
                 FriendRelationship.Friends -> {
-                    OutlinedButton(
-                        onClick = {},
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            disabledContentColor = onBg.copy(alpha = 0.75f),
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, outline),
-                    ) {
-                        Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.size(8.dp))
-                        Text("Connected", fontWeight = FontWeight.Bold)
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                disabledContentColor = onBg.copy(alpha = 0.75f),
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, outline),
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Text("Connected", fontWeight = FontWeight.Bold)
+                        }
+                        if (canInviteToDuo && onInviteToDuo != null) {
+                            Button(
+                                onClick = onInviteToDuo,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300)),
+                            ) {
+                                Icon(Icons.Default.SportsScore, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF1A1208))
+                                Spacer(Modifier.size(8.dp))
+                                Text("Invite to duo streak", fontWeight = FontWeight.Bold, color = Color(0xFF1A1208))
+                            }
+                        }
                     }
                 }
 

@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.saintnico.verdlyhabits.ui.components.AnimatedHabitIcon
+import com.saintnico.verdlyhabits.ui.models.toHabitColor
 import com.saintnico.verdlyhabits.ui.screens.home.HabitItem
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -69,6 +71,7 @@ fun HabitSwipeCard(
     }
 
     val accent = habit.difficulty.color
+    val habitColor = habit.color.toHabitColor()
     val category = habit.category
 
     val riskPulse by rememberInfiniteTransition(label = "risk").animateFloat(
@@ -81,7 +84,7 @@ fun HabitSwipeCard(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
     ) {
         // Underlay (revealed during drag)
         val dragNorm = (offset.value / thresholdPx).coerceIn(-1f, 1f)
@@ -89,7 +92,7 @@ fun HabitSwipeCard(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .background(
                     when {
                         offset.value > 0f -> Color(0xFF1D6B44).copy(alpha = 0.18f + 0.55f * underlayAlpha)
@@ -134,7 +137,11 @@ fun HabitSwipeCard(
             }
         }
 
-        val borderColor = if (isAtRisk) Color(0xFFFFB300).copy(alpha = riskPulse) else Color.Transparent
+        val borderColor = if (isAtRisk) {
+            Color(0xFFFFB300).copy(alpha = riskPulse)
+        } else {
+            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f)
+        }
 
         // Card surface — draggable
         Surface(
@@ -175,13 +182,13 @@ fun HabitSwipeCard(
                         }
                     )
                 }
-                .border(if (isAtRisk) 1.5.dp else 0.dp, borderColor, RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
+                .border(if (isAtRisk) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(22.dp)),
+            shape = RoundedCornerShape(22.dp),
             color = if (complete)
                 MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
             else MaterialTheme.colorScheme.surface,
-            tonalElevation = if (complete) 0.dp else 2.dp,
-            shadowElevation = if (complete) 0.dp else 3.dp
+            tonalElevation = if (complete) 0.dp else 1.dp,
+            shadowElevation = if (complete) 0.dp else 4.dp
         ) {
             Row(
                 modifier = Modifier
@@ -214,15 +221,27 @@ fun HabitSwipeCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(Color(habit.color.toInt()).copy(alpha = 0.15f)),
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(
+                                        habitColor.copy(alpha = 0.22f),
+                                        habitColor.copy(alpha = 0.06f),
+                                    ),
+                                ),
+                            )
+                            .border(
+                                1.dp,
+                                habitColor.copy(alpha = 0.15f),
+                                RoundedCornerShape(14.dp),
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            habit.icon, null,
-                            tint = Color(habit.color.toInt()),
-                            modifier = Modifier.size(22.dp)
+                        AnimatedHabitIcon(
+                            icon = habit.icon,
+                            color = habitColor,
+                            size = 24.dp,
                         )
                         if (habit.isPaused) {
                             Icon(

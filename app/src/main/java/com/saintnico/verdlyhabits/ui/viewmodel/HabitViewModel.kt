@@ -10,7 +10,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.saintnico.verdlyhabits.notifications.ReminderScheduler
 import com.saintnico.verdlyhabits.preferences.dataStore
-import com.saintnico.verdlyhabits.ui.models.premiumHabitIcons
+import com.saintnico.verdlyhabits.ui.models.HabitIconRegistry
 import com.saintnico.verdlyhabits.ui.screens.home.HabitItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -70,8 +70,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             val today = LocalDate.now().format(dateFormatter)
 
             val loadedHabits = entities.map { entity ->
-                val icon = premiumHabitIcons.find { it.vector.name == entity.iconName }?.vector
-                    ?: premiumHabitIcons[0].vector
+                val icon = HabitIconRegistry.iconFor(entity.iconName)
                 
                 // Reset isCompleted if the latest completed date isn't today
                 val isCompletedToday = entity.completedDates.contains(today)
@@ -104,6 +103,12 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             habits.clear()
             habits.addAll(loadedHabits)
             ReminderScheduler.scheduleAll(getApplication())
+            // Normalize legacy icon names to stable ids on next save.
+            val needsIconMigration = entities.any { e ->
+                HabitIconRegistry.premiumIconForId(e.iconName) == null &&
+                    e.iconName != HabitIconRegistry.stableId(HabitIconRegistry.iconFor(e.iconName))
+            }
+            if (needsIconMigration) saveHabits()
         }
         refreshHomeScreenWidgets()
     }
@@ -114,7 +119,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                 HabitEntity(
                     id = it.id,
                     title = it.title,
-                    iconName = it.icon.name,
+                    iconName = HabitIconRegistry.stableId(it.icon),
                     isCompleted = it.isCompleted,
                     reminderEnabled = it.reminderEnabled,
                     reminderTime = it.reminderTime,

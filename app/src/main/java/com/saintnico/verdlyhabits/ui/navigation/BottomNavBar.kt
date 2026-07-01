@@ -2,7 +2,16 @@ package com.saintnico.verdlyhabits.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -164,17 +173,31 @@ fun VerdlyBottomNavBar(
         if (itemWidth > 0) {
             val floatingButtonOffset = with(density) { cutoutCenterX.toDp() - (floatingButtonSize / 2) }
 
+            val gradientColors = when (items[selectedIndex].route) {
+                "home" -> listOf(Color(0xFF43A047), Color(0xFF1B5E20))
+                "challenges" -> listOf(Color(0xFFFFCA28), Color(0xFFFF8F00))
+                "duo" -> listOf(Color(0xFFFF7043), Color(0xFFD84315))
+                "focus" -> listOf(Color(0xFF26C6DA), Color(0xFF00695C))
+                "goals" -> listOf(Color(0xFF42A5F5), Color(0xFF1565C0))
+                "profile" -> listOf(Color(0xFFAB47BC), Color(0xFF6A1B9A))
+                else -> listOf(Color(0xFF74C69D), Color(0xFF2D6A4F))
+            }
+            val shadowColor = gradientColors.first()
+
             Box(
                 modifier = Modifier
                     .offset(x = floatingButtonOffset, y = 4.dp)
                     .size(floatingButtonSize)
+                    .shadow(
+                        elevation = 16.dp, 
+                        shape = CircleShape,
+                        ambientColor = shadowColor,
+                        spotColor = shadowColor
+                    )
                     .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF74C69D), Color(0xFF2D6A4F))
-                        ),
+                        brush = Brush.linearGradient(colors = gradientColors),
                         shape = CircleShape
                     )
-                    .shadow(8.dp, CircleShape)
                     .clip(CircleShape)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -188,15 +211,14 @@ fun VerdlyBottomNavBar(
                 AnimatedContent(
                     targetState = selectedIndex,
                     transitionSpec = {
-                        scaleIn(tween(300)) + fadeIn(tween(300)) togetherWith scaleOut(tween(300)) + fadeOut(tween(300))
+                        (scaleIn(spring(dampingRatio = 0.6f, stiffness = 300f)) + fadeIn(tween(250))) togetherWith 
+                        (scaleOut(spring(dampingRatio = 0.7f, stiffness = 400f)) + fadeOut(tween(200)))
                     },
                     label = "floating_icon"
                 ) { index ->
-                    Icon(
-                        imageVector = items[index].iconSelected,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
+                    AnimatedFloatingNavIcon(
+                        route = items[index].route,
+                        icon = items[index].iconSelected,
                     )
                 }
             }
@@ -217,12 +239,12 @@ fun VerdlyBottomNavBar(
 
                 val itemAlpha by animateFloatAsState(
                     targetValue = if (isSelected) 0f else 1f,
-                    animationSpec = tween(200),
+                    animationSpec = tween(300, easing = FastOutSlowInEasing),
                     label = "item_alpha"
                 )
                 val itemY by animateFloatAsState(
-                    targetValue = if (isSelected) 24f else 0f,
-                    animationSpec = tween(200),
+                    targetValue = if (isSelected) 30f else 0f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
                     label = "item_y"
                 )
 

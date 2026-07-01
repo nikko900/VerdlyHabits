@@ -12,8 +12,7 @@ import com.saintnico.verdlyhabits.domain.HabitFrequency
 import com.saintnico.verdlyhabits.domain.ReminderWindow
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitEntity
 import kotlinx.coroutines.flow.first
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
+import com.saintnico.verdlyhabits.ui.models.HabitIconRegistry
 
 /** Reads persisted habits for background workers (goals sync, nudges). */
 object HabitStoreReader {
@@ -33,7 +32,8 @@ object HabitStoreReader {
                 HabitItem(
                     id = e.id,
                     title = e.title,
-                    icon = Icons.Default.Star,
+                    icon = HabitIconRegistry.iconFor(e.iconName),
+                    color = if (e.color != 0L) e.color else 0xFF52B788L,
                     streak = e.completedDates.size.coerceAtLeast(0),
                     isCompleted = e.isCompleted,
                     reminderEnabled = e.reminderEnabled,

@@ -1,51 +1,5 @@
 package com.saintnico.verdlyhabits.ui.models
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.LocalDrink
-import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.MonitorHeart
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.SelfImprovement
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.ui.graphics.vector.ImageVector
-
-data class PremiumIcon(
-    val id: String,
-    val vector: ImageVector,
-    val name: String
-)
-
-val premiumHabitIcons = listOf(
-    PremiumIcon("water", Icons.Default.WaterDrop, "Water"),
-    PremiumIcon("book", Icons.Default.Book, "Reading"),
-    PremiumIcon("run", Icons.Default.DirectionsRun, "Running"),
-    PremiumIcon("meditate", Icons.Default.SelfImprovement, "Meditation"),
-    PremiumIcon("food", Icons.Default.Restaurant, "Healthy Eating"),
-    PremiumIcon("meds", Icons.Default.Medication, "Medication"),
-    PremiumIcon("sleep", Icons.Default.Bedtime, "Sleep"),
-    PremiumIcon("code", Icons.Default.Code, "Coding"),
-    PremiumIcon("music", Icons.Default.MusicNote, "Music"),
-    PremiumIcon("savings", Icons.Default.Savings, "Savings"),
-    PremiumIcon("gym", Icons.Default.FitnessCenter, "Gym"),
-    PremiumIcon("art", Icons.Default.Brush, "Art"),
-    PremiumIcon("spa", Icons.Default.Spa, "Self Care"),
-    PremiumIcon("heart", Icons.Default.MonitorHeart, "Health"),
-    PremiumIcon("magic", Icons.Default.AutoAwesome, "Magic Routine")
-)
-
 val motivationalQuotes = listOf(
     "We are what we repeatedly do. Excellence, then, is not an act, but a habit. — Aristotle",
     "Motivation is what gets you started. Habit is what keeps you going. — Jim Ryun",

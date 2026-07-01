@@ -29,6 +29,7 @@ import com.saintnico.verdlyhabits.ui.components.PremiumNotificationBar
 import com.saintnico.verdlyhabits.ui.components.ProPaywallSheet
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralAnnualOfferSheet
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralShareSheet
+import com.saintnico.verdlyhabits.ui.components.social.blocksNewDuoInvite
 import com.saintnico.verdlyhabits.ui.components.social.needsDuoAttention
 import com.saintnico.verdlyhabits.ui.screens.achievements.AchievementsScreen
 import com.saintnico.verdlyhabits.ui.screens.challenge.ChallengeScreen
@@ -846,6 +847,7 @@ private fun MainShell(
             composable("stats") {
                 StatsScreen(
                     habits = habitViewModel.habits.toList(),
+                    statsState = statsState,
                     hasFullAccess = hasFullAccess,
                     installDateMillis = billingViewModel.getInstallDateMillis(),
                     onRequestPaywall = onRequestPaywall,
@@ -1025,7 +1027,7 @@ private fun MainShell(
                     },
                     onShowNotification = { msg, isError -> onShowNotification(msg, isError, null) },
                     onLogout = onLogout,
-                    hasDuoBuddy = duoState != null,
+                    hasDuoBuddy = duoState.blocksNewDuoInvite(),
                     myUsername = userUsername,
                     myPhotoUrl = userPhotoUri,
                     onInviteAccountabilityBuddy = { uid, username, photo, onResult ->
@@ -1062,6 +1064,22 @@ private fun MainShell(
                     friendsViewModel = friendsViewModel,
                     onBack = { innerNavController.popBackStack() },
                     onShowNotification = { msg, isError, icon -> onShowNotification(msg, isError, icon) },
+                    canInviteToDuo = !duoState.blocksNewDuoInvite(),
+                    onInviteToDuo = { username, photo ->
+                        accountabilityViewModel.inviteBuddy(
+                            uid = decodedUid,
+                            username = username,
+                            photoUrl = photo,
+                            myUsername = userUsername.ifBlank { userName },
+                            myPhotoUrl = userPhotoUri,
+                        ) { ok, err ->
+                            onShowNotification(
+                                if (ok) "Duo streak invite sent to @$username" else (err ?: "Couldn't send duo invite"),
+                                !ok,
+                                null,
+                            )
+                        }
+                    },
                 )
             }
         }

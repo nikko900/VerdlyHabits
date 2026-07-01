@@ -13,5 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
+keystore/
 tools/ambient_sources/
 tools/ambient_compressed/

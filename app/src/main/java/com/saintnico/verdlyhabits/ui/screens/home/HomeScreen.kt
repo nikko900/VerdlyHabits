@@ -46,16 +46,25 @@ import com.saintnico.verdlyhabits.audio.rememberAppSound
 import com.saintnico.verdlyhabits.data.remote.storage.StorageRepository
 import com.saintnico.verdlyhabits.domain.HabitCategory
 import com.saintnico.verdlyhabits.domain.HabitScheduling
+import com.saintnico.verdlyhabits.ui.components.AnimatedHabitIcon
 import com.saintnico.verdlyhabits.ui.components.BurstIntensity
 import com.saintnico.verdlyhabits.ui.components.CelebrationKonfetti
-import com.saintnico.verdlyhabits.ui.components.DashboardProgressRing
 import com.saintnico.verdlyhabits.ui.components.HabitSwipeCard
-import com.saintnico.verdlyhabits.ui.components.MiniHeatmapStrip
 import com.saintnico.verdlyhabits.ui.components.MomentumBar
+import com.saintnico.verdlyhabits.ui.components.PremiumInsightCard
 import com.saintnico.verdlyhabits.ui.components.StreakFlame
+import com.saintnico.verdlyhabits.ui.components.home.HomeCategoryFilterRow
+import com.saintnico.verdlyhabits.ui.components.home.HomeSectionHeader
+import com.saintnico.verdlyhabits.ui.components.home.HomeTodayFocusCard
+import com.saintnico.verdlyhabits.ui.components.home.HomeTodayHeroCard
+import com.saintnico.verdlyhabits.ui.components.home.HomeWeekPulseStrip
+import com.saintnico.verdlyhabits.engine.MotivationalEngine
+import com.saintnico.verdlyhabits.engine.StatsEngine
+import com.saintnico.verdlyhabits.ui.models.toHabitColor
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
+import com.saintnico.verdlyhabits.ui.components.notifications.AnimatedSettingsButton
 import com.saintnico.verdlyhabits.ui.components.notifications.NotificationBellButton
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralPromoBanner
 import com.saintnico.verdlyhabits.ui.components.social.DuoHubButton
@@ -66,18 +75,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
-
-private val smartInsights = listOf(
-    "Habits completed before 9 AM have a 90% streak survival rate.",
-    "Consistent people don't wait for motivation. They built systems. Like this one.",
-    "Every completion today is a vote for the person you're becoming.",
-    "Small consistent actions outlast intense short bursts. Every. Single. Time.",
-    "You complete habits more on days you also log your mood.",
-    "66 days to lock in a habit for life — real science, not a myth.",
-    "Weekend habits are the hardest to keep. Keep going anyway.",
-    "Your morning habits protect your evening ones. Win the AM.",
-    "Focus sessions average 4× the completion rate of regular habit checks.",
-)
 
 @Composable
 fun HomeScreen(
@@ -154,6 +151,22 @@ fun HomeScreen(
     val statsState = userStatsViewModel?.state?.collectAsState()
     val xpToday = statsState?.value?.xpEarnedToday ?: 0
     val shieldCount = statsState?.value?.streakShields ?: 0
+    val dashboardMetrics = remember(habits, statsState?.value) {
+        StatsEngine.computeDashboard(
+            habits = habits,
+            today = todayDate,
+            totalFocusMinutes = statsState?.value?.totalFocusMinutes ?: 0,
+            memberSinceMillis = statsState?.value?.memberSince ?: System.currentTimeMillis(),
+        )
+    }
+    val topInsight = remember(habits, statsState?.value) {
+        MotivationalEngine.topInsight(
+            habits = habits,
+            longestStreakEver = statsState?.value?.longestStreakEver ?: totalStreak,
+            totalCompletions = statsState?.value?.totalCompletions ?: 0,
+            totalXp = statsState?.value?.totalXp ?: 0,
+        )
+    }
 
     // ── Time / greeting ────────────────────────────────────────────────────
     val now = remember { LocalTime.now() }
@@ -183,7 +196,6 @@ fun HomeScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var insightDismissed by remember { mutableStateOf(false) }
-    val dailyInsight = remember { smartInsights.random() }
 
     var showTimePicker by remember { mutableStateOf(false) }
     var selectedHabitForTimer by remember { mutableStateOf<HabitItem?>(null) }
@@ -561,12 +573,7 @@ fun HomeScreen(
                                 unreadCount = notificationBadgeCount,
                                 onClick = onOpenNotifications,
                             )
-                            IconButton(onClick = onNavigateToSettings) {
-                                Icon(
-                                    Icons.Rounded.Tune, null,
-                                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                                )
-                            }
+                            AnimatedSettingsButton(onClick = onNavigateToSettings)
                         }
                         if (visibleScheduledToday.isNotEmpty()) {
                             MomentumBar(progress = completionRate, xpToday = xpToday)
@@ -577,12 +584,15 @@ fun HomeScreen(
                 // ── Hero ring + streak summary ─────────────────────────────
                 if (visibleScheduledToday.isNotEmpty()) {
                     item {
-                        DashboardHero(
+                        HomeTodayHeroCard(
                             completionRate = completionRate,
                             completedCount = completed.size,
                             totalCount = visibleScheduledToday.size,
                             totalStreak = totalStreak,
-                            onTap = { onNavigateToStats?.invoke() }
+                            consistencyScore = dashboardMetrics.consistencyScore,
+                            weekDeltaPct = dashboardMetrics.weekDeltaPct,
+                            weekTrendUp = dashboardMetrics.weekTrendUp,
+                            onTap = { onNavigateToStats?.invoke() },
                         )
                     }
                 }
@@ -590,11 +600,11 @@ fun HomeScreen(
                 // ── Today's Focus pinned card ──────────────────────────────
                 if (pinned != null && !pinned.isCompleted) {
                     item {
-                        TodayFocusPinnedCard(
+                        HomeTodayFocusCard(
                             habit = pinned,
                             onTapComplete = { handleCompletion(pinned) },
                             onTapFocus = { onNavigateToFocus?.invoke(pinned.id) },
-                            onEdit = { onNavigateToEditHabit(pinned.id) }
+                            onEdit = { onNavigateToEditHabit(pinned.id) },
                         )
                     }
                 }
@@ -602,9 +612,9 @@ fun HomeScreen(
                 // ── Category filter chips ──────────────────────────────────
                 if (visible.size >= 3) {
                     item {
-                        CategoryFilterRow(
+                        HomeCategoryFilterRow(
                             selected = categoryFilter,
-                            onSelect = { categoryFilter = if (categoryFilter == it) null else it }
+                            onSelect = { categoryFilter = if (categoryFilter == it) null else it },
                         )
                     }
                 }
@@ -612,7 +622,10 @@ fun HomeScreen(
                 // ── Insight card ───────────────────────────────────────────
                 if (!insightDismissed && visible.isNotEmpty()) {
                     item {
-                        InsightCard(text = dailyInsight, onDismiss = { insightDismissed = true })
+                        PremiumInsightCard(
+                            insight = topInsight,
+                            onDismiss = { insightDismissed = true },
+                        )
                     }
                 }
 
@@ -648,10 +661,10 @@ fun HomeScreen(
                     }
                 } else {
                     item {
-                        SectionLabel(
-                            "Today",
-                            "${activeFiltered.size} to go",
-                            highlight = activeFiltered.isEmpty() && completedFiltered.isNotEmpty()
+                        HomeSectionHeader(
+                            title = "Today",
+                            badge = "${activeFiltered.size} to go",
+                            highlight = activeFiltered.isEmpty() && completedFiltered.isNotEmpty(),
                         )
                     }
                     items(activeFiltered, key = { it.id }) { habit ->
@@ -674,25 +687,21 @@ fun HomeScreen(
                 // ── 30-day strip ───────────────────────────────────────────
                 if (visible.isNotEmpty()) {
                     item {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(1.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onNavigateToStats?.invoke() }
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                MiniHeatmapStrip(habits = visible)
-                            }
-                        }
+                        HomeWeekPulseStrip(
+                            dailyPulse = dashboardMetrics.dailyPulse,
+                            onTap = { onNavigateToStats?.invoke() },
+                        )
                     }
                 }
 
                 // ── Completed section ──────────────────────────────────────
                 if (completedFiltered.isNotEmpty()) {
                     item {
-                        SectionLabel("Completed", "${completedFiltered.size}", highlight = false)
+                        HomeSectionHeader(
+                            title = "Completed",
+                            badge = "${completedFiltered.size}",
+                            highlight = false,
+                        )
                     }
                     items(completedFiltered, key = { it.id }) { habit ->
                         HabitSwipeCard(
@@ -741,14 +750,19 @@ fun HomeScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val sheetColor = habit.color.toHabitColor()
                     Box(
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
-                            .background(Color(habit.color.toInt()).copy(alpha = 0.18f)),
+                            .background(sheetColor.copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(habit.icon, null, tint = Color(habit.color.toInt()), modifier = Modifier.size(22.dp))
+                        AnimatedHabitIcon(
+                            icon = habit.icon,
+                            color = sheetColor,
+                            size = 22.dp,
+                        )
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -905,302 +919,6 @@ fun HomeScreen(
 }
 
 // ── Sub-composables ──────────────────────────────────────────────────────────
-
-@Composable
-private fun DashboardHero(
-    completionRate: Float,
-    completedCount: Int,
-    totalCount: Int,
-    totalStreak: Int,
-    onTap: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            DashboardProgressRing(
-                progress = completionRate,
-                title = "today",
-                subtitle = if (completionRate >= 1f) "All complete" else null
-            )
-            Spacer(Modifier.width(20.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                HeroStatRow(
-                    icon = { StreakFlame(streak = totalStreak, size = 22.dp) },
-                    label = "Active streaks",
-                    value = "$totalStreak"
-                )
-                HeroStatRow(
-                    icon = {
-                        Icon(
-                            Icons.Rounded.TaskAlt, null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    label = "Completed",
-                    value = "$completedCount / $totalCount"
-                )
-                HeroStatRow(
-                    icon = {
-                        Icon(
-                            Icons.Rounded.QueryStats, null,
-                            tint = Color(0xFFFFB300),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    label = "Tap for full stats",
-                    value = "→"
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeroStatRow(
-    icon: @Composable () -> Unit,
-    label: String,
-    value: String
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(22.dp), contentAlignment = Alignment.Center) { icon() }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            label,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-    }
-}
-
-@Composable
-private fun TodayFocusPinnedCard(
-    habit: HabitItem,
-    onTapComplete: () -> Unit,
-    onTapFocus: () -> Unit,
-    onEdit: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
-        elevation = CardDefaults.cardElevation(0.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                        Color(0xFFFFB300).copy(alpha = 0.45f)
-                    )
-                ),
-                shape = RoundedCornerShape(22.dp)
-            )
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.AutoAwesome, null,
-                    tint = Color(0xFFFFB300),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Today's focus",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(Color(habit.color.toInt()).copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(habit.icon, null, tint = Color(habit.color.toInt()), modifier = Modifier.size(28.dp))
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        habit.title,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        StreakFlame(streak = habit.streak, size = 14.dp)
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            "${habit.streak}-day streak · ${habit.difficulty.displayName}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onTapComplete,
-                    modifier = Modifier.weight(1f).height(46.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Complete", fontWeight = FontWeight.Bold)
-                }
-                OutlinedButton(
-                    onClick = onTapFocus,
-                    modifier = Modifier.weight(1f).height(46.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(Icons.Rounded.Timer, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Focus", fontWeight = FontWeight.SemiBold)
-                }
-                IconButton(onClick = onEdit) {
-                    Icon(
-                        Icons.Rounded.MoreHoriz, null,
-                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryFilterRow(
-    selected: HabitCategory?,
-    onSelect: (HabitCategory) -> Unit
-) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(HabitCategory.entries.toTypedArray()) { cat ->
-            val isOn = cat == selected
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = if (isOn) cat.color.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surface,
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = if (isOn) cat.color else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.10f)
-                ),
-                modifier = Modifier.clickable { onSelect(cat) }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(cat.color)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        cat.displayName,
-                        fontSize = 11.sp,
-                        fontWeight = if (isOn) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isOn) cat.color else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InsightCard(text: String, onDismiss: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.Lightbulb, null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    Icons.Rounded.Close, null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionLabel(title: String, badge: String, highlight: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
-            modifier = Modifier.weight(1f)
-        )
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(
-                    if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f)
-                )
-                .padding(horizontal = 8.dp, vertical = 3.dp)
-        ) {
-            Text(
-                badge,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (highlight) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
-        }
-    }
-}
 
 @Composable
 private fun ShieldBadge(count: Int) {
