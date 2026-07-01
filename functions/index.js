@@ -101,12 +101,17 @@ async function writeInbox(targetUid, itemId, payload) {
     actorUsername: payload.actorUsername || "",
     referenceId: payload.referenceId || itemId,
     read: false,
-    actionState: "pending",
+    actionState: payload.actionState != null ? payload.actionState : "pending",
     createdAt: FieldValue.serverTimestamp(),
   };
   if (payload.actorPhotoUrl) data.actorPhotoUrl = payload.actorPhotoUrl;
   if (payload.challengeId) data.challengeId = payload.challengeId;
+  if (payload.route) data.route = payload.route;
   await db.collection("users").doc(targetUid).collection("inbox").doc(itemId).set(data, { merge: true });
+}
+
+async function writeActivityInbox(targetUid, itemId, payload) {
+  await writeInbox(targetUid, itemId, { ...payload, actionState: "none" });
 }
 
 async function push(uid, { title, body, type, challengeId, proofKey, route, referenceId }) {
@@ -217,6 +222,16 @@ exports.onChallengeRankChange = onDocumentUpdated("challenges/{challengeId}", as
           challengeId,
         })
       );
+      jobs.push(
+        writeActivityInbox(uid, `${challengeId}_rank`, {
+          type: "CHALLENGE_UPDATE",
+          title: habit,
+          body: "You took the lead — you're #1. Defend it.",
+          actorUid: uid,
+          referenceId: challengeId,
+          challengeId,
+        })
+      );
     } else if (newRank < oldRank) {
       jobs.push(
         push(uid, {
@@ -226,14 +241,36 @@ exports.onChallengeRankChange = onDocumentUpdated("challenges/{challengeId}", as
           challengeId,
         })
       );
+      jobs.push(
+        writeActivityInbox(uid, `${challengeId}_rank`, {
+          type: "CHALLENGE_UPDATE",
+          title: habit,
+          body: `You climbed to #${newRank}. Keep the momentum.`,
+          actorUid: uid,
+          referenceId: challengeId,
+          challengeId,
+        })
+      );
     } else if (newRank > oldRank) {
       const passerUid = newBoard[newRank - 2];
       const passerName = passerUid ? (after.memberNames || {})[passerUid] || "Someone" : "Someone";
+      const overtakenBody = `${passerName} overtook you — you're #${newRank} now. Post proof to fight back.`;
       jobs.push(
         push(uid, {
           title: habit,
-          body: `${passerName} overtook you — you're #${newRank} now. Post proof to fight back.`,
+          body: overtakenBody,
           type: "overtaken",
+          challengeId,
+        })
+      );
+      jobs.push(
+        writeActivityInbox(uid, `${challengeId}_rank`, {
+          type: "CHALLENGE_UPDATE",
+          title: habit,
+          body: overtakenBody,
+          actorUid: passerUid || "",
+          actorUsername: passerName,
+          referenceId: challengeId,
           challengeId,
         })
       );
@@ -263,15 +300,27 @@ exports.onChallengeActivity = onDocumentCreated(
     if (type === "checkin" || type === "late_checkin") {
       const recipients = members(ch.members).filter((uid) => uid && uid !== actorId);
       await Promise.all(
-        recipients.map((uid) =>
-          push(uid, {
-            title: habit,
-            body: `${actorName} just posted proof — be the first to react.`,
-            type: "proof_posted",
-            challengeId,
-            proofKey: (item.metadata && item.metadata.completionDate) || "",
-          })
-        )
+        recipients.map((uid) => {
+          const proofBody = `${actorName} just posted proof — be the first to react.`;
+          return Promise.all([
+            push(uid, {
+              title: habit,
+              body: proofBody,
+              type: "proof_posted",
+              challengeId,
+              proofKey: (item.metadata && item.metadata.completionDate) || "",
+            }),
+            writeActivityInbox(uid, `${challengeId}_proof_${actorId}`, {
+              type: "CHALLENGE_UPDATE",
+              title: habit,
+              body: proofBody,
+              actorUid: actorId,
+              actorUsername: actorName,
+              referenceId: challengeId,
+              challengeId,
+            }),
+          ]);
+        })
       );
       return;
     }
@@ -282,13 +331,25 @@ exports.onChallengeActivity = onDocumentCreated(
       if (!ownerUid || ownerUid === actorId) return;
       const reaction = REACTION_LABELS[meta.reaction] || "a reaction";
       const points = REACTION_WEIGHTS[meta.reaction] || meta.points || 0;
-      await push(ownerUid, {
-        title: habit,
-        body: `${actorName} hit your proof with ${reaction} +${points} pts.`,
-        type: "reaction_received",
-        challengeId,
-        proofKey: meta.proofKey || "",
-      });
+      const reactionBody = `${actorName} hit your proof with ${reaction} +${points} pts.`;
+      await Promise.all([
+        push(ownerUid, {
+          title: habit,
+          body: reactionBody,
+          type: "reaction_received",
+          challengeId,
+          proofKey: meta.proofKey || "",
+        }),
+        writeActivityInbox(ownerUid, `${challengeId}_react_${actorId}_${event.params.eventId}`, {
+          type: "CHALLENGE_UPDATE",
+          title: habit,
+          body: reactionBody,
+          actorUid: actorId,
+          actorUsername: actorName,
+          referenceId: challengeId,
+          challengeId,
+        }),
+      ]);
     }
   }
 );

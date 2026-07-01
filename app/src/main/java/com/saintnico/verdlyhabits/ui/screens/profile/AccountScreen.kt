@@ -183,6 +183,7 @@ fun AccountScreen(
     onInviteAccountabilityBuddy: ((uid: String, username: String, photoUrl: String?, onResult: (Boolean, String?) -> Unit) -> Unit)? = null,
     notificationBadgeCount: Int = 0,
     onOpenNotifications: () -> Unit = {},
+    notificationsViewModel: com.saintnico.verdlyhabits.ui.viewmodel.NotificationsViewModel,
 ) {
     val context = LocalContext.current
     val bg = MaterialTheme.colorScheme.background
@@ -400,6 +401,15 @@ fun AccountScreen(
 
             item {
                 Spacer(Modifier.height(22.dp))
+                val notifState by notificationsViewModel.state.collectAsState()
+                val pulseFeed = remember(
+                    socialSnapshot.activityFeed,
+                    notifState.items,
+                    notifState.announcements,
+                    notifState.dismissedAnnouncementIds,
+                ) {
+                    notificationsViewModel.pulseFeed(socialSnapshot.activityFeed)
+                }
                 ProfileSocialProofSection(
                     snapshot = socialSnapshot,
                     weeklyProfileViews = weeklyProfileViews,
@@ -407,6 +417,11 @@ fun AccountScreen(
                     primary = primary,
                     onBg = onBg,
                     onUnlockPro = onNavigateToSubscription,
+                    pulseFeed = pulseFeed,
+                    onSeeAllActivity = {
+                        notificationsViewModel.openActivityTab()
+                        onOpenNotifications()
+                    },
                 )
             }
 

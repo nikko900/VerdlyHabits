@@ -25,6 +25,7 @@ data class InboxNotification(
     val actorPhotoUrl: String? = null,
     val referenceId: String = "",
     val challengeId: String? = null,
+    val route: String? = null,
     val read: Boolean = false,
     val createdAtMillis: Long = 0L,
     val actionState: String = "pending",

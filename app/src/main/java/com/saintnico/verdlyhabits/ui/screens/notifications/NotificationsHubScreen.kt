@@ -80,6 +80,7 @@ fun NotificationsHubScreen(
     onBack: () -> Unit,
     onNavigateToMemberProfile: (String) -> Unit,
     onOpenChallenge: (String) -> Unit,
+    onOpenRoute: (String) -> Unit = {},
     onShowToast: (String, Boolean) -> Unit,
 ) {
     val state by notificationsViewModel.state.collectAsState()
@@ -210,6 +211,11 @@ fun NotificationsHubScreen(
                                     notificationsViewModel.markRead(item.id)
                                     item.challengeId?.let(onOpenChallenge)
                                 },
+                                onOpenRoute = { route ->
+                                    notificationsViewModel.markRead(item.id)
+                                    onOpenRoute(route)
+                                },
+                                onMarkRead = { notificationsViewModel.markRead(item.id) },
                             )
                         }
                         item { Spacer(Modifier.height(24.dp)) }
@@ -267,6 +273,8 @@ private fun NotificationCard(
     onApproveArena: () -> Unit,
     onDeclineArena: () -> Unit,
     onOpenChallenge: () -> Unit,
+    onOpenRoute: (String) -> Unit,
+    onMarkRead: () -> Unit,
 ) {
     val showActions = item.actionState == "pending" && !item.read || item.actionState == "pending"
     val icon = iconForType(item.type)
@@ -283,6 +291,10 @@ private fun NotificationCard(
         onClick = {
             when (item.type) {
                 InboxNotificationType.CHALLENGE_UPDATE -> onOpenChallenge()
+                InboxNotificationType.SYSTEM -> {
+                    val route = item.route?.takeIf { it.isNotBlank() }
+                    if (route != null) onOpenRoute(route) else onMarkRead()
+                }
                 else -> onOpenProfile()
             }
         },
@@ -350,7 +362,8 @@ private fun NotificationCard(
                 }
             }
             AnimatedVisibility(
-                visible = showActions && item.type != InboxNotificationType.CHALLENGE_UPDATE,
+                visible = showActions && item.type != InboxNotificationType.CHALLENGE_UPDATE &&
+                    item.type != InboxNotificationType.SYSTEM,
                 enter = fadeIn(),
                 exit = fadeOut(),
             ) {
@@ -457,7 +470,7 @@ private fun EmptyNotificationsState(onBg: Color, primary: Color) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Friend requests, duo invites, and arena updates will show up here.",
+            "Friend requests, duo invites, arena updates, and live pulse activity show up here.",
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = onBg.copy(alpha = 0.55f),
             lineHeight = 20.sp,

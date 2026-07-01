@@ -675,6 +675,7 @@ private fun MainShell(
 
     LaunchedEffect(hasFullAccess) {
         accountabilityViewModel.setPremiumAccess(hasFullAccess)
+        notificationsViewModel.setPremiumAccess(hasFullAccess)
     }
 
     LaunchedEffect(userUsername) {
@@ -839,6 +840,23 @@ private fun MainShell(
                             popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
+                        }
+                    },
+                    onOpenRoute = { route ->
+                        when (route.lowercase()) {
+                            "paywall", "pro", "subscription" -> onRequestPaywall(PaywallTrigger.GoPro)
+                            "referral" -> {
+                                referralViewModel.ensureReady()
+                                showReferralInvite = true
+                            }
+                            "duo" -> navigateToDuo()
+                            "challenges", "arena" -> {
+                                innerNavController.navigate("challenges") {
+                                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
                         }
                     },
                     onShowToast = { msg, isError -> onShowNotification(msg, isError, null) },
@@ -1042,6 +1060,7 @@ private fun MainShell(
                     },
                     notificationBadgeCount = bellBadgeCount,
                     onOpenNotifications = navigateToNotifications,
+                    notificationsViewModel = notificationsViewModel,
                 )
             }
             composable("profile_subscription") {

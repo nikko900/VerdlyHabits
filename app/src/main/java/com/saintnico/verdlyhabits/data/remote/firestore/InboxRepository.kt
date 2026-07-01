@@ -60,6 +60,7 @@ class InboxRepository {
             )
             notification.actorPhotoUrl?.let { data["actorPhotoUrl"] = it }
             notification.challengeId?.let { data["challengeId"] = it }
+            notification.route?.let { data["route"] = it }
             val id = notification.referenceId.ifBlank { inboxRef(targetUid).document().id }
             inboxRef(targetUid).document(id).set(data).await()
             Result.success(Unit)
@@ -113,6 +114,7 @@ class InboxRepository {
             actorPhotoUrl = data["actorPhotoUrl"] as? String,
             referenceId = data["referenceId"] as? String ?: id,
             challengeId = data["challengeId"] as? String,
+            route = data["route"] as? String,
             read = data["read"] as? Boolean ?: false,
             createdAtMillis = created,
             actionState = data["actionState"] as? String ?: "none",

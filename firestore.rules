@@ -54,6 +54,17 @@ service cloud.firestore {
           && request.resource.data.weekKey is string;
         allow delete: if false;
       }
+
+      // Dismissed dev announcements (Live Pulse / Activity).
+      match /announcementReads/{announcementId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
+    }
+
+    // Dev broadcasts — read active promos/updates; writes via Console or Admin SDK only.
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     // --- friendRequests: Connect / friends (doc id: {fromUid}_{toUid}) ---
