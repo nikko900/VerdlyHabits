@@ -65,26 +65,37 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         val prefs = getApplication<Application>().dataStore.data.first()
         val json = prefs[HABITS_KEY]
         if (!json.isNullOrEmpty()) {
+            val loaded = applyHabitJson(json)
+            if (!loaded) {
+                restoreFromFirestore()
+            }
+        }
+        refreshHomeScreenWidgets()
+    }
+
+    private suspend fun applyHabitJson(json: String): Boolean {
+        return try {
             val type = object : TypeToken<List<HabitEntity>>() {}.type
-            val entities: List<HabitEntity> = gson.fromJson(json, type)
+            val entities: List<HabitEntity> = gson.fromJson(json, type) ?: emptyList()
             val today = LocalDate.now().format(dateFormatter)
 
             val loadedHabits = entities.map { entity ->
                 val icon = HabitIconRegistry.iconFor(entity.iconName)
-                
-                // Reset isCompleted if the latest completed date isn't today
-                val isCompletedToday = entity.completedDates.contains(today)
-                
+
+                // Reset isCompleted if the latest completed date isn't today.
+                val completedDates = entity.completedDates ?: emptySet()
+                val isCompletedToday = completedDates.contains(today)
+
                 HabitItem(
                     id = entity.id,
                     title = entity.title,
                     icon = icon,
-                    streak = calculateStreak(entity.completedDates),
+                    streak = calculateStreak(completedDates),
                     isCompleted = isCompletedToday,
                     reminderEnabled = entity.reminderEnabled,
                     reminderTime = entity.reminderTime,
                     reminderTime2 = entity.reminderTime2,
-                    completedDates = entity.completedDates ?: emptySet(),
+                    completedDates = completedDates,
                     color = if (entity.color != 0L) entity.color else 0xFF4CAF50L,
                     plantedAt = if (entity.plantedAt > 0L) entity.plantedAt else System.currentTimeMillis(),
                     notes = entity.notes,
@@ -109,8 +120,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     e.iconName != HabitIconRegistry.stableId(HabitIconRegistry.iconFor(e.iconName))
             }
             if (needsIconMigration) saveHabits()
+            true
+        } catch (_: Exception) {
+            false
         }
-        refreshHomeScreenWidgets()
     }
 
     private fun saveHabits() {
@@ -172,7 +185,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     getApplication<Application>().dataStore.edit { prefs ->
                         prefs[HABITS_KEY] = json
                     }
-                    loadHabits()
+                    applyHabitJson(json)
+                    refreshHomeScreenWidgets()
                 }
             } catch (_: Exception) {
                 // Network/rules may fail — keep local cache rather than crash.

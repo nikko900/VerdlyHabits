@@ -23,7 +23,7 @@ object AccountSessionCoordinator {
 
     suspend fun onUserSignedIn(context: Context, uid: String): Boolean {
         val previous = readLastUid(context)
-        val switched = previous != uid
+        val switched = previous != null && previous != uid
         if (switched) {
             wipeLocalUserData(context)
         }

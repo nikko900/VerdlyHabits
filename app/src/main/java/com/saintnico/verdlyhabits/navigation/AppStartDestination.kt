@@ -25,7 +25,7 @@ fun resolveAppStartDestination(context: Context): String = runBlocking {
 
     val firebaseUser = FirebaseAuth.getInstance().currentUser
     if (firebaseUser != null) {
-        val needsProfile = runCatching { UserRepository().needsUsernameSetup() }.getOrDefault(false)
+        val needsProfile = runCatching { UserRepository().needsUsernameSetup() }.getOrDefault(true)
         return@runBlocking if (needsProfile) Screen.ProfileSetup.route else Screen.Main.route
     }
 

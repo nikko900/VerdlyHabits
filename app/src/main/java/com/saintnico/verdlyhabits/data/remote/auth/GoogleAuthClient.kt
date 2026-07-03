@@ -44,16 +44,19 @@ class GoogleAuthClient(private val context: Context) {
         return try {
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             val result = auth.signInWithCredential(credential).await()
-            
-            // Check if profile exists in Firestore
-            val isTrulyNewUser = !runCatching { userRepository.userExists() }.getOrDefault(true)
-            
-            if (isTrulyNewUser) {
-                userRepository.seedDefaultUserData()
+
+            // If the Firestore profile doc is missing (new Google account, or a prior seed
+            // failed), create it. Defaulting to "missing" on read errors avoids skipping seed
+            // when rules/network briefly fail — that left second accounts without a users/{uid} doc.
+            val firestoreProfileExists = runCatching { userRepository.userExists() }.getOrDefault(false)
+            val needsProfileSetup = result.additionalUserInfo?.isNewUser == true || !firestoreProfileExists
+            if (needsProfileSetup) {
+                runCatching { userRepository.ensureUserDocument() }
+                    .onFailure { it.printStackTrace() }
             }
             com.saintnico.verdlyhabits.referral.ReferralManager.processPendingReferral(context)
-            
-            result to isTrulyNewUser
+
+            result to needsProfileSetup
         } catch (e: Exception) {
             e.printStackTrace()
             null

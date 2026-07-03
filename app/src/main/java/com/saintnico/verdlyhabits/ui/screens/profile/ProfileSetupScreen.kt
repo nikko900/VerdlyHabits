@@ -67,12 +67,13 @@ fun ProfileSetupScreen(
         contract = ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri != null) {
-            val cacheFile = File(context.cacheDir, "profile_setup_tmp.jpg")
+            val profileDir = File(context.filesDir, "profile").also { it.mkdirs() }
+            val photoFile = File(profileDir, "profile_setup_tmp.jpg")
             try {
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    cacheFile.outputStream().use { output -> input.copyTo(output) }
+                    photoFile.outputStream().use { output -> input.copyTo(output) }
                 }
-                photoUri = Uri.fromFile(cacheFile).toString()
+                photoUri = Uri.fromFile(photoFile).toString()
             } catch (_: Exception) {
             }
         }

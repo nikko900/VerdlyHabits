@@ -2,6 +2,7 @@ package com.saintnico.verdlyhabits.session
 
 import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
+import com.saintnico.verdlyhabits.data.remote.firestore.UserRepository
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.SettingsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
@@ -20,6 +21,7 @@ suspend fun prepareSignedInSession(
     if (switched) {
         habitViewModel.onAccountSessionChanged()
     }
+    runCatching { UserRepository().ensureUserDocument() }
     habitViewModel.restoreFromFirestore()
     userStatsViewModel.restoreFromFirestore()
     runCatching { settingsViewModel.pullProfileFromCloud() }

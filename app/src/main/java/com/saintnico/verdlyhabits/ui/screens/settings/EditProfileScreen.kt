@@ -168,14 +168,15 @@ fun EditProfileScreen(
         contract = ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         if (uri != null) {
-            val cacheFile = java.io.File(context.cacheDir, "profile_edit_tmp.jpg")
+            val profileDir = java.io.File(context.filesDir, "profile").also { it.mkdirs() }
+            val photoFile = java.io.File(profileDir, "profile_edit_tmp.jpg")
             try {
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    cacheFile.outputStream().use { output ->
+                    photoFile.outputStream().use { output ->
                         input.copyTo(output)
                     }
                 }
-                photoUri = android.net.Uri.fromFile(cacheFile).toString()
+                photoUri = android.net.Uri.fromFile(photoFile).toString()
             } catch (_: Exception) {
                 onShowNotification("Failed to process image", true)
             }

@@ -181,7 +181,7 @@ fun VerdlyNavGraph(
                             val needsSetup = runCatching {
                                 com.saintnico.verdlyhabits.data.remote.firestore.UserRepository()
                                     .needsUsernameSetup()
-                            }.getOrDefault(false)
+                            }.getOrDefault(true)
                             val dest = if (needsSetup) Screen.ProfileSetup.route else Screen.Main.route
                             navController.navigate(dest) {
                                 popUpTo(Screen.Login.route) { inclusive = true }

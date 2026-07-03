@@ -33,11 +33,18 @@ class UserRepository {
         }
     }
 
+    /** Create the Firestore users/{uid} doc when missing (safe to call on every sign-in). */
+    suspend fun ensureUserDocument() {
+        if (!userExists()) {
+            seedDefaultUserData()
+        }
+    }
+
     /** Initial seeding for a brand new user */
     suspend fun seedDefaultUserData() {
         val user = auth.currentUser ?: return
         val userDoc = firestore.collection("users").document(user.uid)
-        
+
         val snapshot = userDoc.get().await()
         if (!snapshot.exists()) {
             val defaultData = hashMapOf(
@@ -80,6 +87,7 @@ class UserRepository {
         usernameChanged: Boolean = false,
     ) {
         val user = auth.currentUser ?: return
+        ensureUserDocument()
         val data = mutableMapOf<String, Any>(
             "displayName" to name,
             "username" to username,

@@ -198,8 +198,12 @@ fun SignUpScreen(
                         coroutineScope.launch {
                             try {
                                 auth.createUserWithEmailAndPassword(email, password).await()
-                                com.saintnico.verdlyhabits.data.local.AppDataStore(context).clearAllData()
-                                userRepository.seedDefaultUserData()
+                                val uid = auth.currentUser?.uid
+                                if (uid != null) {
+                                    com.saintnico.verdlyhabits.session.AccountSessionCoordinator
+                                        .onUserSignedIn(context, uid)
+                                }
+                                userRepository.ensureUserDocument()
                                 com.saintnico.verdlyhabits.referral.ReferralManager.processPendingReferral(context)
                                 onSignUpSuccess()
                             } catch (e: Exception) {

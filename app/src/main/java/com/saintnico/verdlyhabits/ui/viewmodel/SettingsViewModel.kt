@@ -1,6 +1,7 @@
 package com.saintnico.verdlyhabits.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val themePreference = ThemePreference(application)
@@ -245,51 +247,87 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
             try {
                 _isSaving.value = true
-                var finalPhotoUrl = photoUri
+                val existingPhotoUri = themePreference.userPhotoUri.first()
+                var localPhotoUri = photoUri
+                var publicPhotoUrl = photoUri
+                var shouldRefreshProfileFromCloud = true
 
                 // Only attempt upload if it's a new local URI
                 if (photoUri != null && !photoUri.startsWith("http")) {
-                    val uri = android.net.Uri.parse(photoUri)
-                    val uploadedUrl = userRepository.uploadProfilePicture(uri)
+                    val durableLocalUri = persistProfilePhoto(Uri.parse(photoUri))
+                    localPhotoUri = durableLocalUri ?: existingPhotoUri
+
+                    val uploadUri = localPhotoUri?.let(Uri::parse) ?: Uri.parse(photoUri)
+                    val uploadedUrl = userRepository.uploadProfilePicture(uploadUri)
                     if (uploadedUrl != null) {
-                        finalPhotoUrl = uploadedUrl
+                        publicPhotoUrl = uploadedUrl
+                        localPhotoUri = uploadedUrl
                     } else {
-                        // If upload failed, we keep the original photo if it was a remote one,
-                        // or notify that the image sync failed.
-                        _errorEvent.emit("Cloud storage upload failed. Image may not sync.")
-                        // We continue saving other fields though.
+                        publicPhotoUrl = existingPhotoUri?.takeIf { it.startsWith("http") }
+                        shouldRefreshProfileFromCloud = false
+                        _errorEvent.emit("Cloud photo sync failed. Your photo was kept on this device.")
                     }
                 }
 
                 // Save to Firestore FIRST (Remote First)
                 userRepository.updateProfile(
-                    name, username, bio, motto, favoritePlant, finalPhotoUrl, profileAccentKey, usernameChanged,
+                    name, username, bio, motto, favoritePlant, publicPhotoUrl, profileAccentKey, usernameChanged,
                 )
 
                 // Then Save to DataStore for local persistence
                 themePreference.saveProfile(
-                    name, username, email, bio, motto, favoritePlant, finalPhotoUrl, profileAccentKey,
+                    name, username, email, bio, motto, favoritePlant, localPhotoUri, profileAccentKey,
                 )
                 if (usernameChanged) {
                     themePreference.updateLastUsernameEdit(System.currentTimeMillis())
                 }
 
-                // Sync identity to all active challenges for immediate update on leaderboards
+                // Best-effort: challenge roster sync must not roll back a saved profile.
                 val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
                 if (uid != null) {
                     val challengeLabel = com.saintnico.verdlyhabits.data.remote.firestore.UserRepository
                         .publicLabel(name, username)
-                    com.saintnico.verdlyhabits.data.remote.firestore.ChallengeRepository()
-                        .updateMemberIdentity(uid, challengeLabel, finalPhotoUrl)
+                    runCatching {
+                        com.saintnico.verdlyhabits.data.remote.firestore.ChallengeRepository()
+                            .updateMemberIdentity(uid, challengeLabel, publicPhotoUrl)
+                    }
                 }
 
-                syncProfileFromFirebase()
+                if (shouldRefreshProfileFromCloud) {
+                    syncProfileFromFirebase()
+                }
                 _profileSaveSuccess.emit(Unit)
             } catch (e: Exception) {
                 _errorEvent.emit("Failed to save profile — ${UserFacingErrors.message(e)}")
             } finally {
                 _isSaving.value = false
             }
+        }
+    }
+
+    private fun persistProfilePhoto(source: Uri): String? {
+        val app = getApplication<Application>()
+        val targetDir = File(app.filesDir, "profile").also { it.mkdirs() }
+        val target = File(targetDir, "profile_picture.jpg")
+
+        return try {
+            val sourcePath = source.path
+            if (source.scheme == "file" && sourcePath != null) {
+                val sourceFile = File(sourcePath)
+                if (sourceFile.absolutePath == target.absolutePath) {
+                    return Uri.fromFile(target).toString()
+                }
+                sourceFile.inputStream().use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            } else {
+                app.contentResolver.openInputStream(source)?.use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                } ?: return null
+            }
+            Uri.fromFile(target).toString()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -314,8 +352,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 if (uid != null) {
                     val challengeLabel = com.saintnico.verdlyhabits.data.remote.firestore.UserRepository
                         .publicLabel(currentName, currentUsername)
-                    com.saintnico.verdlyhabits.data.remote.firestore.ChallengeRepository()
-                        .updateMemberIdentity(uid, challengeLabel, currentPhoto)
+                    runCatching {
+                        com.saintnico.verdlyhabits.data.remote.firestore.ChallengeRepository()
+                            .updateMemberIdentity(uid, challengeLabel, currentPhoto)
+                    }
                 }
                 themePreference.updateVersions(newProfileVersion, newProfileVersion)
             }
