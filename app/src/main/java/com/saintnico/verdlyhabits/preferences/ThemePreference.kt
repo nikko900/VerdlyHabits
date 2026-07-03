@@ -210,9 +210,12 @@ class ThemePreference(private val context: Context) {
                 prefs[USER_FAVORITE_PLANT] = userDoc.getString("favoritePlant") ?: "Oak"
                 prefs[PROFILE_ACCENT] = userDoc.getString("profileAccent") ?: "sage"
 
+                val currentLocalPhoto = prefs[USER_PHOTO_URI]
                 val photoUrl = userDoc.getString("photoUrl") ?: user.photoUrl?.toString()
                 if (photoUrl != null) {
                     prefs[USER_PHOTO_URI] = photoUrl
+                } else if (currentLocalPhoto?.startsWith("file:") == true) {
+                    prefs[USER_PHOTO_URI] = currentLocalPhoto
                 } else {
                     prefs.remove(USER_PHOTO_URI)
                 }
