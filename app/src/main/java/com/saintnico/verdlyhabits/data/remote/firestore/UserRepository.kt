@@ -37,6 +37,8 @@ class UserRepository {
     suspend fun ensureUserDocument() {
         if (!userExists()) {
             seedDefaultUserData()
+        } else {
+            backfillSearchIndexFields()
         }
     }
 
@@ -47,9 +49,13 @@ class UserRepository {
 
         val snapshot = userDoc.get().await()
         if (!snapshot.exists()) {
+            val defaultUsername = "UnknownRival"
             val defaultData = hashMapOf(
                 "displayName" to "Rival",
-                "username" to "UnknownRival",
+                "username" to defaultUsername,
+                "usernameLower" to UserSearchIndex.usernameLower(defaultUsername),
+                "displayNameLower" to UserSearchIndex.displayNameLower("Rival"),
+                "searchKeywords" to UserSearchIndex.buildSearchKeywords(defaultUsername, "Rival"),
                 "profileVersion" to 1,
                 "lastUsernameEditTimestamp" to 0L,
                 "email" to user.email,
@@ -91,7 +97,9 @@ class UserRepository {
         val data = mutableMapOf<String, Any>(
             "displayName" to name,
             "username" to username,
-            "usernameLower" to username.trim().lowercase(),
+            "usernameLower" to UserSearchIndex.usernameLower(username),
+            "displayNameLower" to UserSearchIndex.displayNameLower(name),
+            "searchKeywords" to UserSearchIndex.buildSearchKeywords(username, name),
             "bio" to bio,
             "motto" to motto,
             "favoritePlant" to favoritePlant,
@@ -232,28 +240,97 @@ class UserRepository {
         return username.isBlank() || username.equals("UnknownRival", ignoreCase = true)
     }
 
-    /** Find a rival by @username (case-insensitive). */
-    suspend fun findByUsername(raw: String): PublicUserProfile? {
+    /** Find a rival by @username (case-insensitive, exact match). */
+    suspend fun findByUsername(raw: String): PublicUserProfile? =
+        searchUsers(raw, limit = 1).firstOrNull()
+
+    /**
+     * Instagram-style user discovery: prefix + keyword matching on username and display name.
+     * Does not require the full exact handle.
+     */
+    suspend fun searchUsers(raw: String, limit: Int = 15): List<PublicUserProfile> {
         val query = raw.trim().removePrefix("@").lowercase()
-        if (query.length < 2) return null
+        if (query.length < 2) return emptyList()
+
         val me = auth.currentUser?.uid
         val col = firestore.collection("users")
+        val end = query + "\uf8ff"
+        val ranked = linkedMapOf<String, Pair<PublicUserProfile, Int>>()
 
-        suspend fun fromSnapshot(snap: com.google.firebase.firestore.QuerySnapshot): PublicUserProfile? {
-            val doc = snap.documents.firstOrNull() ?: return null
-            val uid = doc.id
-            if (uid == me) return null
-            return fetchPublicProfile(uid)
+        suspend fun absorb(snapshot: com.google.firebase.firestore.QuerySnapshot) {
+            for (doc in snapshot.documents) {
+                val uid = doc.id
+                if (uid == me || ranked.containsKey(uid)) continue
+
+                val username = doc.getString("username").orEmpty()
+                if (username.isBlank() || username.equals("UnknownRival", ignoreCase = true)) continue
+
+                val displayName = doc.getString("displayName").orEmpty()
+                val profile = fetchPublicProfile(uid) ?: continue
+                val score = UserSearchIndex.rank(query, username, displayName)
+                ranked[uid] = profile to score
+            }
         }
 
-        var snap = col.whereEqualTo("usernameLower", query).limit(1).get().await()
-        fromSnapshot(snap)?.let { return it }
+        absorb(col.whereEqualTo("usernameLower", query).limit(limit).get().await())
 
-        snap = col.whereEqualTo("username", query).limit(1).get().await()
-        fromSnapshot(snap)?.let { return it }
+        if (ranked.size < limit) {
+            absorb(
+                col.whereGreaterThanOrEqualTo("usernameLower", query)
+                    .whereLessThanOrEqualTo("usernameLower", end)
+                    .limit(limit)
+                    .get()
+                    .await(),
+            )
+        }
 
-        // Legacy: exact match on stored casing
-        snap = col.whereEqualTo("username", raw.trim().removePrefix("@")).limit(1).get().await()
-        return fromSnapshot(snap)
+        if (ranked.size < limit) {
+            absorb(
+                col.whereGreaterThanOrEqualTo("displayNameLower", query)
+                    .whereLessThanOrEqualTo("displayNameLower", end)
+                    .limit(limit)
+                    .get()
+                    .await(),
+            )
+        }
+
+        if (ranked.size < limit) {
+            runCatching {
+                absorb(col.whereArrayContains("searchKeywords", query).limit(limit).get().await())
+            }
+        }
+
+        return ranked.values
+            .sortedByDescending { it.second }
+            .take(limit)
+            .map { it.first }
+    }
+
+    /** Ensures search fields exist for older accounts created before indexed discovery. */
+    private suspend fun backfillSearchIndexFields() {
+        val user = auth.currentUser ?: return
+        val doc = firestore.collection("users").document(user.uid).get().await()
+        if (!doc.exists()) return
+
+        val username = doc.getString("username").orEmpty()
+        val displayName = doc.getString("displayName").orEmpty()
+        val updates = mutableMapOf<String, Any>()
+
+        if (!doc.contains("usernameLower") && username.isNotBlank()) {
+            updates["usernameLower"] = UserSearchIndex.usernameLower(username)
+        }
+        if (!doc.contains("displayNameLower") && displayName.isNotBlank()) {
+            updates["displayNameLower"] = UserSearchIndex.displayNameLower(displayName)
+        }
+        val keywords = doc.get("searchKeywords") as? List<*>
+        if (keywords.isNullOrEmpty() && (username.isNotBlank() || displayName.isNotBlank())) {
+            updates["searchKeywords"] = UserSearchIndex.buildSearchKeywords(username, displayName)
+        }
+
+        if (updates.isNotEmpty()) {
+            firestore.collection("users").document(user.uid)
+                .set(updates, SetOptions.merge())
+                .await()
+        }
     }
 }

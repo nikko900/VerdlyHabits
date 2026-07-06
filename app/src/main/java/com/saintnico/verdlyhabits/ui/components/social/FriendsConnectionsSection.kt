@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsScore
-import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -97,12 +96,16 @@ fun FriendsConnectionsSection(
     val incoming by friendsViewModel.incomingRequestsUi.collectAsState()
     val joinRequests by friendsViewModel.pendingChallengeJoinRequests.collectAsState()
     val friends by friendsViewModel.friendSummaries.collectAsState()
-    val searchResult by friendsViewModel.usernameSearchResult.collectAsState()
+    val searchResults by friendsViewModel.usernameSearchResults.collectAsState()
     val searchError by friendsViewModel.usernameSearchError.collectAsState()
     val searchLoading by friendsViewModel.usernameSearchLoading.collectAsState()
     var showBuddyPicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var reportTarget by remember { mutableStateOf<UsernameSearchResult?>(null) }
+
+    LaunchedEffect(searchQuery) {
+        friendsViewModel.onSearchQueryChanged(searchQuery)
+    }
 
     LaunchedEffect(focusFindFriends) {
         if (focusFindFriends) {
@@ -160,13 +163,14 @@ fun FriendsConnectionsSection(
                 )
                 OutlinedTextField(
                     value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                        friendsViewModel.clearUsernameSearch()
-                    },
+                    onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
-                        Text("@username", color = Color.White.copy(alpha = 0.35f), fontSize = 14.sp)
+                        Text(
+                            "Search name or username",
+                            color = Color.White.copy(alpha = 0.35f),
+                            fontSize = 14.sp,
+                        )
                     },
                     leadingIcon = {
                         Icon(Icons.Default.Search, null, tint = ConnectionsShellColors.accentBright)
@@ -194,26 +198,17 @@ fun FriendsConnectionsSection(
                     ),
                     shape = RoundedCornerShape(16.dp),
                 )
-                Button(
-                    onClick = { friendsViewModel.searchByUsername(searchQuery) },
-                    enabled = searchQuery.trim().length >= 2 && !searchLoading,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ConnectionsShellColors.actionFill,
-                        contentColor = ConnectionsShellColors.onShell,
-                        disabledContainerColor = ConnectionsShellColors.disabledFill,
-                        disabledContentColor = ConnectionsShellColors.disabledLabel,
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Rounded.PersonAdd, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Search & connect", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                if (searchQuery.trim().length >= 2) {
+                    Text(
+                        "Results update as you type",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.45f),
+                    )
                 }
                 searchError?.let { err ->
                     Text(err, fontSize = 12.sp, color = Color(0xFFFFB4A2))
                 }
-                searchResult?.let { result ->
+                searchResults.forEach { result ->
                     UsernameSearchResultRow(
                         result = result,
                         primary = primary,
@@ -331,7 +326,7 @@ fun FriendsConnectionsSection(
                                 color = Color.White.copy(alpha = 0.88f),
                             )
                             Text(
-                                "Search by @username above, tap someone on a challenge leaderboard, or open their profile and tap Connect.",
+                                "Search by name or username above, tap someone on a challenge leaderboard, or open their profile and tap Connect.",
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.55f),
                                 lineHeight = 17.sp,

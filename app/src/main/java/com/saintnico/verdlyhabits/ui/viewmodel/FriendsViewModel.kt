@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class FriendSummary(
@@ -160,8 +162,8 @@ class FriendsViewModel(application: Application) : AndroidViewModel(application)
             .flowOn(Dispatchers.IO)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _usernameSearchResult = MutableStateFlow<UsernameSearchResult?>(null)
-    val usernameSearchResult = _usernameSearchResult.asStateFlow()
+    private val _usernameSearchResults = MutableStateFlow<List<UsernameSearchResult>>(emptyList())
+    val usernameSearchResults = _usernameSearchResults.asStateFlow()
 
     private val _usernameSearchError = MutableStateFlow<String?>(null)
     val usernameSearchError = _usernameSearchError.asStateFlow()
@@ -169,46 +171,68 @@ class FriendsViewModel(application: Application) : AndroidViewModel(application)
     private val _usernameSearchLoading = MutableStateFlow(false)
     val usernameSearchLoading = _usernameSearchLoading.asStateFlow()
 
+    private var searchJob: Job? = null
+
     fun clearUsernameSearch() {
-        _usernameSearchResult.value = null
+        searchJob?.cancel()
+        _usernameSearchResults.value = emptyList()
         _usernameSearchError.value = null
         _usernameSearchLoading.value = false
     }
 
-    fun searchByUsername(query: String) {
-        viewModelScope.launch {
-            _usernameSearchLoading.value = true
-            _usernameSearchError.value = null
-            _usernameSearchResult.value = null
-            val normalized = query.trim().removePrefix("@")
-            try {
-                when {
-                    normalized.length < 2 -> {
-                        _usernameSearchError.value = "Enter at least 2 characters"
-                    }
-                    else -> {
-                        val profile = userRepository.findByUsername(normalized)
-                        if (profile == null) {
-                            _usernameSearchError.value = "No rival found for @$normalized"
-                        } else if (profile.uid == myUid) {
-                            _usernameSearchError.value = "That's your account"
-                        } else {
-                            val rel = friendRepository.relationshipWith(profile.uid)
-                            _usernameSearchResult.value = UsernameSearchResult(
-                                uid = profile.uid,
-                                username = profile.username.ifBlank { profile.displayName }.ifBlank { "Rival" },
-                                displayName = profile.displayName,
-                                photoUrl = profile.photoUrl,
-                                relationship = rel,
-                            )
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                _usernameSearchError.value = FriendsErrorMessages.forThrowable(e.message)
-            }
-            _usernameSearchLoading.value = false
+    fun onSearchQueryChanged(query: String) {
+        searchJob?.cancel()
+        val normalized = query.trim().removePrefix("@")
+        if (normalized.length < 2) {
+            clearUsernameSearch()
+            return
         }
+        searchJob = viewModelScope.launch {
+            delay(350)
+            performUserSearch(normalized)
+        }
+    }
+
+    fun searchByUsername(query: String) {
+        searchJob?.cancel()
+        viewModelScope.launch {
+            val normalized = query.trim().removePrefix("@")
+            if (normalized.length < 2) {
+                _usernameSearchResults.value = emptyList()
+                _usernameSearchError.value = "Enter at least 2 characters"
+                _usernameSearchLoading.value = false
+                return@launch
+            }
+            performUserSearch(normalized)
+        }
+    }
+
+    private suspend fun performUserSearch(normalized: String) {
+        _usernameSearchLoading.value = true
+        _usernameSearchError.value = null
+        _usernameSearchResults.value = emptyList()
+        try {
+            val profiles = userRepository.searchUsers(normalized)
+            val results = profiles.mapNotNull { profile ->
+                if (profile.uid == myUid) return@mapNotNull null
+                val rel = friendRepository.relationshipWith(profile.uid)
+                UsernameSearchResult(
+                    uid = profile.uid,
+                    username = profile.username.ifBlank { profile.displayName }.ifBlank { "Rival" },
+                    displayName = profile.displayName,
+                    photoUrl = profile.photoUrl,
+                    relationship = rel,
+                )
+            }
+            if (results.isEmpty()) {
+                _usernameSearchError.value = "No rivals found for \"$normalized\""
+            } else {
+                _usernameSearchResults.value = results
+            }
+        } catch (e: Exception) {
+            _usernameSearchError.value = FriendsErrorMessages.forThrowable(e.message)
+        }
+        _usernameSearchLoading.value = false
     }
 
     fun sendFriendRequest(toUid: String, onResult: (Boolean, String?) -> Unit) {
