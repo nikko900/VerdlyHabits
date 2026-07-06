@@ -272,13 +272,15 @@ class UserRepository {
             }
         }
 
-        absorb(col.whereEqualTo("usernameLower", query).limit(limit).get().await())
+        val queryLimit = limit.toLong()
+
+        absorb(col.whereEqualTo("usernameLower", query).limit(queryLimit).get().await())
 
         if (ranked.size < limit) {
             absorb(
                 col.whereGreaterThanOrEqualTo("usernameLower", query)
                     .whereLessThanOrEqualTo("usernameLower", end)
-                    .limit(limit)
+                    .limit(queryLimit)
                     .get()
                     .await(),
             )
@@ -288,7 +290,7 @@ class UserRepository {
             absorb(
                 col.whereGreaterThanOrEqualTo("displayNameLower", query)
                     .whereLessThanOrEqualTo("displayNameLower", end)
-                    .limit(limit)
+                    .limit(queryLimit)
                     .get()
                     .await(),
             )
@@ -296,7 +298,7 @@ class UserRepository {
 
         if (ranked.size < limit) {
             runCatching {
-                absorb(col.whereArrayContains("searchKeywords", query).limit(limit).get().await())
+                absorb(col.whereArrayContains("searchKeywords", query).limit(queryLimit).get().await())
             }
         }
 

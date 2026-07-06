@@ -31,6 +31,14 @@
         { "fieldPath": "fromUid", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "userReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reporterUid", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

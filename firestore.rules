@@ -232,9 +232,23 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.reporterUid == uid()
         && request.resource.data.reportedUid is string
+        && request.resource.data.reportedUsername is string
         && request.resource.data.reasonCode is string
-        && request.resource.data.reportedUid != uid();
-      allow read, update, delete: if false;
+        && request.resource.data.reasonLabel is string
+        && request.resource.data.status == 'pending'
+        && request.resource.data.reportedUid != uid()
+        && reportId == request.resource.data.reporterUid + '_' + request.resource.data.reportedUid;
+
+      allow get, list: if signedIn() && resource.data.reporterUid == uid();
+
+      allow update: if signedIn()
+        && resource.data.reporterUid == uid()
+        && request.resource.data.reporterUid == resource.data.reporterUid
+        && request.resource.data.reportedUid == resource.data.reportedUid
+        && request.resource.data.status == 'pending'
+        && reportId == resource.data.reporterUid + '_' + resource.data.reportedUid;
+
+      allow delete: if false;
     }
 
     // --- referral codes (code -> owner mapping) ---

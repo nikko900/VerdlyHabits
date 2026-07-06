@@ -398,6 +398,8 @@ fun FriendsConnectionsSection(
         ReportUserSheet(
             reportedUid = target.uid,
             reportedUsername = target.username,
+            reportedDisplayName = target.displayName,
+            source = "friend_search",
             onDismiss = { reportTarget = null },
             onSubmitted = {
                 onShowNotification("Report submitted. Thank you.", false)

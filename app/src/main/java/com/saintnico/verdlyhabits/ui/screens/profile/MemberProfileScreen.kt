@@ -684,6 +684,8 @@ fun MemberProfileScreen(
         ReportUserSheet(
             reportedUid = memberUid,
             reportedUsername = profile!!.username.ifBlank { profile!!.displayName },
+            reportedDisplayName = profile!!.displayName,
+            source = "member_profile",
             onDismiss = { showReportSheet = false },
             onSubmitted = {
                 onShowNotification(

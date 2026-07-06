@@ -435,6 +435,37 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             // ──────────────────────────────────────────────────
+            // PRIVACY & SAFETY
+            // ──────────────────────────────────────────────────
+            SettingsSectionHeader(title = "Privacy & safety")
+            Spacer(modifier = Modifier.height(8.dp))
+
+            var showMyReports by remember { mutableStateOf(false) }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                SettingsNavigationItem(
+                    icon = Icons.Default.Security,
+                    iconTint = Color(0xFF5C6BC0),
+                    title = "Your reports",
+                    subtitle = "View reports you've submitted",
+                    onClick = { showMyReports = true },
+                )
+            }
+
+            if (showMyReports) {
+                com.saintnico.verdlyhabits.ui.components.social.MyReportsSheet(
+                    onDismiss = { showMyReports = false },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // ──────────────────────────────────────────────────
             // DANGER ZONE
             // ──────────────────────────────────────────────────
             Card(

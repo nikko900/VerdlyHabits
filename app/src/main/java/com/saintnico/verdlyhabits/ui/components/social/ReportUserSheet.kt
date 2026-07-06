@@ -74,6 +74,8 @@ private enum class ReportStep { WHY, DETAILS, DONE }
 fun ReportUserSheet(
     reportedUid: String,
     reportedUsername: String,
+    reportedDisplayName: String = "",
+    source: String = "unknown",
     onDismiss: () -> Unit,
     onSubmitted: () -> Unit = {},
 ) {
@@ -162,9 +164,11 @@ fun ReportUserSheet(
                                 val result = repository.submitUserReport(
                                     reportedUid = reportedUid,
                                     reportedUsername = reportedUsername,
+                                    reportedDisplayName = reportedDisplayName,
                                     reasonCode = reason.code,
                                     reasonLabel = reason.title,
                                     details = details.takeIf { it.isNotBlank() },
+                                    source = source,
                                 )
                                 submitting = false
                                 if (result.isSuccess) {
