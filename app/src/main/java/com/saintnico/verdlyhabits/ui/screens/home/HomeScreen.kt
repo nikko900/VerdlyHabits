@@ -346,7 +346,7 @@ fun HomeScreen(
         }
     }
 
-    val handleCompletion: (HabitItem) -> Unit = { habit ->
+    val handleCompletion: (HabitItem) -> Unit = habitCompletion@{ habit ->
         val activeChallenge = challengeViewModel?.getActiveChallengeForHabit(habit.title)
         val isChallengeHabit = activeChallenge != null
 
@@ -357,7 +357,7 @@ fun HomeScreen(
                     true,
                     Icons.Rounded.Schedule,
                 )
-                return@handleCompletion
+                return@habitCompletion
             }
             val granted = ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
@@ -387,7 +387,7 @@ fun HomeScreen(
                         true,
                         Icons.Rounded.Schedule,
                     )
-                    return@handleCompletion
+                    return@habitCompletion
                 }
                 viewModel.toggleHabitCompletion(habit.id)
                 val newStreak = habit.streak + 1

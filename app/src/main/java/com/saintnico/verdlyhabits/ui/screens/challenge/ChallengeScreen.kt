@@ -828,7 +828,7 @@ private fun CreateChallengeDialog(
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 repeat(3) { i ->
                     Box(
                         Modifier
