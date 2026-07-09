@@ -119,14 +119,29 @@ class UserRepository {
     }
 
     /** Upload profile picture to Firebase Storage and return download URL */
-    suspend fun uploadProfilePicture(uri: android.net.Uri): String? {
+    suspend fun uploadProfilePicture(context: android.content.Context, uri: android.net.Uri): String? {
         val user = auth.currentUser ?: return null
-        val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference
-            .child("profile_pictures/${user.uid}.jpg")
-        
         return try {
+            user.getIdToken(true).await()
+            val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference
+                .child("profile_pictures/${user.uid}.jpg")
+            val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+                .setContentType("image/jpeg")
+                .build()
+
             android.util.Log.d("UserRepository", "Uploading photo to: ${storageRef.path}")
-            storageRef.putFile(uri).await()
+
+            val inputStream = when (uri.scheme) {
+                "file" -> {
+                    val path = uri.path ?: return null
+                    java.io.FileInputStream(java.io.File(path))
+                }
+                else -> context.contentResolver.openInputStream(uri)
+            } ?: return null
+
+            inputStream.use { stream ->
+                storageRef.putStream(stream, metadata).await()
+            }
             val url = storageRef.downloadUrl.await().toString()
             android.util.Log.d("UserRepository", "Upload success: $url")
             url

@@ -46,6 +46,8 @@ data class HabitEntity(
     val isFavoriteFocus: Boolean = false,
     val frequency: String? = null,
     val customDaysMask: String? = null,
+    val completionWindowStart: String? = null,
+    val completionWindowEnd: String? = null,
 )
 
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
@@ -109,6 +111,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     isFavoriteFocus = entity.isFavoriteFocus,
                     frequency = HabitFrequency.fromStored(entity.frequency),
                     customDaysMask = entity.customDaysMask,
+                    completionWindowStart = entity.completionWindowStart,
+                    completionWindowEnd = entity.completionWindowEnd,
                 )
             }
             habits.clear()
@@ -151,6 +155,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     isFavoriteFocus = it.isFavoriteFocus,
                     frequency = it.frequency.name,
                     customDaysMask = it.customDaysMask,
+                    completionWindowStart = it.completionWindowStart,
+                    completionWindowEnd = it.completionWindowEnd,
                 )
             }
             val json = gson.toJson(entities)

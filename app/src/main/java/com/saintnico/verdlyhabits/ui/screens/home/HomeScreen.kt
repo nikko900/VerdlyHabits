@@ -44,6 +44,7 @@ import com.saintnico.verdlyhabits.audio.SoundEngine
 import com.saintnico.verdlyhabits.audio.rememberAppHaptics
 import com.saintnico.verdlyhabits.audio.rememberAppSound
 import com.saintnico.verdlyhabits.data.remote.storage.StorageRepository
+import com.saintnico.verdlyhabits.domain.CompletionWindow
 import com.saintnico.verdlyhabits.domain.HabitCategory
 import com.saintnico.verdlyhabits.domain.HabitScheduling
 import com.saintnico.verdlyhabits.ui.components.AnimatedHabitIcon
@@ -75,6 +76,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
+
+private fun HabitItem.hasCommitmentWindow(): Boolean =
+    !completionWindowStart.isNullOrBlank() && !completionWindowEnd.isNullOrBlank()
+
+private fun HabitItem.isWithinCommitmentWindow(now: LocalTime = LocalTime.now()): Boolean {
+    if (!hasCommitmentWindow()) return true
+    return CompletionWindow.isActiveNow(completionWindowStart, completionWindowEnd, now)
+}
+
+private fun HabitItem.mustCompleteInsideWindow(): Boolean =
+    CompletionWindow.requiresWindow(difficulty) && hasCommitmentWindow()
+
+private fun HabitItem.displayXpPreview(streakAfter: Int, withinWindow: Boolean): Int {
+    var xp = difficulty.xp + minOf(streakAfter * 2, 30)
+    if (hasCommitmentWindow() && withinWindow) {
+        xp += CompletionWindow.onTimeBonusXp(difficulty)
+    }
+    return xp
+}
 
 @Composable
 fun HomeScreen(
@@ -260,7 +280,18 @@ fun HomeScreen(
                     }
 
                     if (!habit.isCompleted) {
-                        val xp = habit.difficulty.xp + minOf(habit.streak * 2, 30)
+                        if (habit.mustCompleteInsideWindow() && !habit.isWithinCommitmentWindow()) {
+                            onShowNotification?.invoke(
+                                "${habit.title} counts only ${CompletionWindow.formatRange(habit.completionWindowStart, habit.completionWindowEnd)}.",
+                                true,
+                                Icons.Rounded.Schedule,
+                            )
+                            habitPendingPhoto = null
+                            uriToSave = null
+                            return@launch
+                        }
+                        val withinWindow = habit.isWithinCommitmentWindow()
+                        val xp = habit.displayXpPreview(habit.streak + 1, withinWindow)
                         registerCompletionFx(
                             scope = scope,
                             sound = sound, haptics = haptics,
@@ -277,7 +308,8 @@ fun HomeScreen(
                             isPerfectDay = active.size == 1,
                             isFirstCompletion = habit.completedDates.isEmpty(),
                             habits = viewModel.habits.toList(),
-                            difficulty = habit.difficulty
+                            difficulty = habit.difficulty,
+                            withinCommitmentWindow = habit.hasCommitmentWindow() && withinWindow,
                         )
                         val ns = habit.streak + 1
                         if (!hasFullAccess && ns == 7) onRequestPaywall(PaywallTrigger.SevenDayStreak)
@@ -319,6 +351,14 @@ fun HomeScreen(
         val isChallengeHabit = activeChallenge != null
 
         if (isChallengeHabit && !habit.isCompleted) {
+            if (habit.mustCompleteInsideWindow() && !habit.isWithinCommitmentWindow()) {
+                onShowNotification?.invoke(
+                    "${habit.title} counts only ${CompletionWindow.formatRange(habit.completionWindowStart, habit.completionWindowEnd)}.",
+                    true,
+                    Icons.Rounded.Schedule,
+                )
+                return@handleCompletion
+            }
             val granted = ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) ==
                 PackageManager.PERMISSION_GRANTED
             if (!granted) {
@@ -341,9 +381,18 @@ fun HomeScreen(
             }
         } else {
             if (!habit.isCompleted) {
+                if (habit.mustCompleteInsideWindow() && !habit.isWithinCommitmentWindow()) {
+                    onShowNotification?.invoke(
+                        "${habit.title} counts only ${CompletionWindow.formatRange(habit.completionWindowStart, habit.completionWindowEnd)}.",
+                        true,
+                        Icons.Rounded.Schedule,
+                    )
+                    return@handleCompletion
+                }
                 viewModel.toggleHabitCompletion(habit.id)
                 val newStreak = habit.streak + 1
-                val xp = habit.difficulty.xp + minOf(habit.streak * 2, 30)
+                val withinWindow = habit.isWithinCommitmentWindow()
+                val xp = habit.displayXpPreview(newStreak, withinWindow)
                 registerCompletionFx(
                     scope = scope,
                     sound = sound, haptics = haptics,
@@ -361,7 +410,8 @@ fun HomeScreen(
                     isPerfectDay = active.size == 1,
                     isFirstCompletion = habit.completedDates.isEmpty(),
                     habits = viewModel.habits.toList(),
-                    difficulty = habit.difficulty
+                    difficulty = habit.difficulty,
+                    withinCommitmentWindow = habit.hasCommitmentWindow() && withinWindow,
                 )
                 if (!hasFullAccess && newStreak == 7) onRequestPaywall(PaywallTrigger.SevenDayStreak)
                 else if (hasFullAccess && newStreak == 7) pendingStreakMilestone = habit

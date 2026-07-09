@@ -94,10 +94,13 @@ class UserStatsViewModel(application: Application) : AndroidViewModel(applicatio
         isPerfectDay: Boolean,
         isFirstCompletion: Boolean,
         habits: List<com.saintnico.verdlyhabits.ui.screens.home.HabitItem>,
-        difficulty: Difficulty = Difficulty.EASY
+        difficulty: Difficulty = Difficulty.EASY,
+        withinCommitmentWindow: Boolean = false,
     ) {
         viewModelScope.launch {
-            val xp = GamificationEngine.xpForCompletion(streak, isPerfectDay, isFirstCompletion, difficulty)
+            val xp = GamificationEngine.xpForCompletion(
+                streak, isPerfectDay, isFirstCompletion, difficulty, withinCommitmentWindow,
+            )
             val burst = GamificationEngine.streakBurstXp(streak)
             val total = xp + burst
             store.addXp(total)

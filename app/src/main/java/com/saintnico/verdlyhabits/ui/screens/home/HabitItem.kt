@@ -32,4 +32,7 @@ data class HabitItem(
     val frequency: HabitFrequency = HabitFrequency.DAILY,
     /** Mon..Sun, seven `0`/`1` chars when [frequency] is CUSTOM. */
     val customDaysMask: String? = null,
+    /** Inclusive daily window (`HH:mm`) — required for Hard/Epic, optional for Medium. */
+    val completionWindowStart: String? = null,
+    val completionWindowEnd: String? = null,
 )

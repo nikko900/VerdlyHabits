@@ -258,14 +258,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     localPhotoUri = durableLocalUri ?: existingPhotoUri
 
                     val uploadUri = localPhotoUri?.let(Uri::parse) ?: Uri.parse(photoUri)
-                    val uploadedUrl = userRepository.uploadProfilePicture(uploadUri)
+                    val uploadedUrl = userRepository.uploadProfilePicture(
+                        getApplication<Application>().applicationContext,
+                        uploadUri,
+                    )
                     if (uploadedUrl != null) {
                         publicPhotoUrl = uploadedUrl
                         localPhotoUri = uploadedUrl
                     } else {
                         publicPhotoUrl = existingPhotoUri?.takeIf { it.startsWith("http") }
+                        localPhotoUri = publicPhotoUrl
                         shouldRefreshProfileFromCloud = false
-                        _errorEvent.emit("Cloud photo sync failed. Your photo was kept on this device.")
+                        _errorEvent.emit(
+                            "Photo could not upload to Firebase. Name and bio were saved — try the photo again after deploying Storage rules.",
+                        )
                     }
                 }
 

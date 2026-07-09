@@ -15,12 +15,16 @@ object GamificationEngine {
         currentStreak: Int,
         isPerfectDay: Boolean,
         isFirstCompletion: Boolean,
-        difficulty: Difficulty = Difficulty.EASY
+        difficulty: Difficulty = Difficulty.EASY,
+        withinCommitmentWindow: Boolean = false,
     ): Int {
         var xp = difficulty.xp
         xp += minOf(currentStreak * 2, 30)
         if (isPerfectDay) xp += 50
         if (isFirstCompletion) xp += 25
+        if (withinCommitmentWindow) {
+            xp += com.saintnico.verdlyhabits.domain.CompletionWindow.onTimeBonusXp(difficulty)
+        }
         return xp
     }
 

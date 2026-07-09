@@ -212,12 +212,18 @@ class ThemePreference(private val context: Context) {
 
                 val currentLocalPhoto = prefs[USER_PHOTO_URI]
                 val photoUrl = userDoc.getString("photoUrl") ?: user.photoUrl?.toString()
-                if (photoUrl != null) {
-                    prefs[USER_PHOTO_URI] = photoUrl
-                } else if (currentLocalPhoto?.startsWith("file:") == true) {
-                    prefs[USER_PHOTO_URI] = currentLocalPhoto
-                } else {
-                    prefs.remove(USER_PHOTO_URI)
+                when {
+                    !photoUrl.isNullOrBlank() -> prefs[USER_PHOTO_URI] = photoUrl
+                    currentLocalPhoto?.startsWith("file:") == true -> {
+                        val path = android.net.Uri.parse(currentLocalPhoto).path
+                        val stillExists = path != null && java.io.File(path).exists()
+                        if (stillExists) {
+                            prefs[USER_PHOTO_URI] = currentLocalPhoto
+                        } else {
+                            prefs.remove(USER_PHOTO_URI)
+                        }
+                    }
+                    else -> prefs.remove(USER_PHOTO_URI)
                 }
                 prefs[PROFILE_VERSION] = userDoc.getLong("profileVersion")?.toInt() ?: 0
                 prefs[LAST_USERNAME_EDIT_TIMESTAMP] = userDoc.getLong("lastUsernameEditTimestamp") ?: 0L
