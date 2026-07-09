@@ -67,6 +67,8 @@ import com.saintnico.verdlyhabits.ui.theme.GoldColor
 import com.saintnico.verdlyhabits.ui.theme.SilverColor
 import com.saintnico.verdlyhabits.ui.theme.BronzeColor
 import com.saintnico.verdlyhabits.ui.theme.StakeAmber
+import com.saintnico.verdlyhabits.ui.theme.dmSansFamily
+import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
 import com.saintnico.verdlyhabits.ui.theme.SuccessGreen
 import com.saintnico.verdlyhabits.ui.theme.XPPurple
 import com.saintnico.verdlyhabits.ui.viewmodel.ProofState
@@ -797,7 +799,7 @@ private fun CreateChallengeDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(primary, tertiary))),
                     contentAlignment = Alignment.Center
@@ -805,26 +807,40 @@ private fun CreateChallengeDialog(
                     Icon(Icons.Default.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Text(
-                    "New Challenge",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Normal,
-                    color = onBg
-                )
+                Column {
+                    Text(
+                        "Launch an arena",
+                        fontFamily = frauncesFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 22.sp,
+                        color = onBg,
+                    )
+                    Text(
+                        when (pagerState.currentPage) {
+                            0 -> "Name the battle — you’re already a host"
+                            1 -> "Set the rules that make it fair"
+                            else -> "Pick the daily finish line"
+                        },
+                        fontFamily = dmSansFamily,
+                        fontSize = 12.sp,
+                        color = onBg.copy(alpha = 0.5f),
+                    )
+                }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Spacer(Modifier.height(14.dp))
+            Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 repeat(3) { i ->
                     Box(
                         Modifier
                             .padding(horizontal = 4.dp)
-                            .size(if (pagerState.currentPage == i) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(if (pagerState.currentPage == i) primary else onBg.copy(alpha = 0.2f))
+                            .height(4.dp)
+                            .width(if (pagerState.currentPage == i) 28.dp else 10.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (pagerState.currentPage == i) primary else onBg.copy(alpha = 0.18f))
                     )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             HorizontalPager(
                 state = pagerState,
@@ -839,6 +855,21 @@ private fun CreateChallengeDialog(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        Text(
+                            "What will you all prove together?",
+                            fontFamily = frauncesFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            lineHeight = 26.sp,
+                            color = onBg,
+                        )
+                        Text(
+                            "A clear habit + a playful stake turns friends into rivals who care.",
+                            fontFamily = dmSansFamily,
+                            fontSize = 13.sp,
+                            color = onBg.copy(alpha = 0.55f),
+                            lineHeight = 18.sp,
+                        )
                         OutlinedTextField(
                             value = habitName,
                             onValueChange = { habitName = it.take(30) },
@@ -881,6 +912,19 @@ private fun CreateChallengeDialog(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Text(
+                            "How long is this chapter?",
+                            fontFamily = frauncesFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            color = onBg,
+                        )
+                        Text(
+                            "Short enough to finish. Long enough to change you.",
+                            fontFamily = dmSansFamily,
+                            fontSize = 13.sp,
+                            color = onBg.copy(alpha = 0.55f),
+                        )
                         Text("Duration", fontWeight = FontWeight.SemiBold, color = onBg.copy(alpha = 0.7f), fontSize = 13.sp)
                         val durations = listOf(7, 14, 21, 30)
                         Row(
@@ -952,15 +996,18 @@ private fun CreateChallengeDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            "When should the daily proof be posted?",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = onBg
+                            "When does the day close?",
+                            fontFamily = frauncesFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            color = onBg,
                         )
                         Text(
-                            "Members must post before this time each day.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = onBg.copy(alpha = 0.55f)
+                            "Everyone posts proof before this line. Fair clocks make fair wins.",
+                            fontFamily = dmSansFamily,
+                            fontSize = 13.sp,
+                            color = onBg.copy(alpha = 0.55f),
+                            lineHeight = 18.sp,
                         )
                         deadlineCards.chunked(2).forEach { rowCards ->
                             Row(
@@ -1055,9 +1102,10 @@ private fun CreateChallengeDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = primary)
                 ) {
                     Text(
-                        if (lastPage) "Launch challenge" else "Next",
+                        if (lastPage) "Open the arena" else "Continue",
                         color = Color.White,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = dmSansFamily,
                     )
                     if (!lastPage) {
                         Spacer(Modifier.width(4.dp))
@@ -1079,34 +1127,64 @@ private fun JoinChallengeDialog(
     onJoin: (String) -> Unit
 ) {
     var challengeId by remember { mutableStateOf("") }
+    val primary = MaterialTheme.colorScheme.primary
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.GroupAdd, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Join Challenge", fontWeight = FontWeight.Bold)
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.GroupAdd, null, tint = primary, modifier = Modifier.size(28.dp))
             }
         },
-        text = {
-            OutlinedTextField(
-                value = challengeId,
-                onValueChange = { challengeId = it },
-                label = { Text("Challenge ID or invite code") },
-                placeholder = { Text("Long ID, link, or 6-letter code") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+        title = {
+            Text(
+                "Step into an arena",
+                fontFamily = frauncesFamily,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Paste a code from a friend. The moment you join, you’re already in the story — proof starts tomorrow.",
+                    fontFamily = dmSansFamily,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    lineHeight = 20.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = challengeId,
+                    onValueChange = { challengeId = it },
+                    label = { Text("Invite code or challenge ID") },
+                    placeholder = { Text("6-letter code, link, or long ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                )
+            }
         },
         confirmButton = {
             Button(
                 onClick = { if (challengeId.isNotBlank()) onJoin(challengeId.trim()) },
-                enabled = challengeId.isNotBlank()
-            ) { Text("Join") }
+                enabled = challengeId.isNotBlank(),
+                shape = RoundedCornerShape(50),
+            ) {
+                Text("Join the arena", fontFamily = dmSansFamily, fontWeight = FontWeight.Bold)
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Not now") }
         }
     )
 }

@@ -76,6 +76,8 @@ import com.saintnico.verdlyhabits.ui.components.rememberPressScale
 import com.saintnico.verdlyhabits.ui.theme.DangerRed
 import com.saintnico.verdlyhabits.ui.theme.StakeAmber
 import com.saintnico.verdlyhabits.ui.theme.SuccessGreen
+import com.saintnico.verdlyhabits.ui.theme.dmSansFamily
+import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
 import com.saintnico.verdlyhabits.ui.theme.isAppearanceDark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -305,21 +307,22 @@ internal fun IllustratedEmptyChallenges(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "You're not in a challenge yet",
-            style = MaterialTheme.typography.headlineSmall,
+            "Your first arena is waiting",
+            fontFamily = frauncesFamily,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
-            fontSize = 24.sp,
+            fontSize = 26.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
         Text(
-            "Challenges you see here are only the ones you've joined. Paste a challenge ID from a friend, or start your own and invite your crew.",
-            style = MaterialTheme.typography.bodyMedium,
+            "Joining or creating is already a win — you’re choosing people who will hold you to it.",
+            fontFamily = dmSansFamily,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
             fontSize = 14.sp,
             lineHeight = 20.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 20.dp)
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
         Spacer(Modifier.height(20.dp))
         val (iJoin, mJoin) = rememberPressScale()
@@ -333,7 +336,7 @@ internal fun IllustratedEmptyChallenges(
             border = BorderStroke(1.5.dp, primary.copy(alpha = 0.55f)),
             interactionSource = iJoin
         ) {
-            Text("Join with challenge ID", fontWeight = FontWeight.Bold, color = primary)
+            Text("Step into a friend’s arena", fontWeight = FontWeight.Bold, color = primary)
         }
         Spacer(Modifier.height(12.dp))
         val (i, m) = rememberPressScale()
@@ -347,11 +350,11 @@ internal fun IllustratedEmptyChallenges(
             colors = ButtonDefaults.buttonColors(containerColor = primary),
             interactionSource = i
         ) {
-            Text("Start a challenge →", fontWeight = FontWeight.Bold)
+            Text("Host your own arena →", fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "Tip: tap + to create or join anytime.",
+            "Tip: tap + anytime — create or join in one breath.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
         )
