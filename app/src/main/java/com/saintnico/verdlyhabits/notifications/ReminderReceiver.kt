@@ -12,20 +12,20 @@ class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val habitTitle = intent.getStringExtra(EXTRA_HABIT_TITLE) ?: "Your Habit"
         val habitId = intent.getStringExtra(EXTRA_HABIT_ID)
-
-        NotificationHelper.showReminder(
-            context = context,
-            notificationId = habitId?.hashCode() ?: 0,
-            channelId = CHANNEL_ID,
-            channelName = "Habit Reminders",
-            title = habitTitle,
-            body = "Don't break your streak — tap to complete.",
-        )
+        val appContext = context.applicationContext
 
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                ReminderScheduler.rescheduleFromIntent(context.applicationContext, intent)
+                NotificationHelper.showReminderRespectingPrefs(
+                    context = appContext,
+                    notificationId = habitId?.hashCode() ?: 0,
+                    channelId = CHANNEL_ID,
+                    channelName = "Habit Reminders",
+                    title = habitTitle,
+                    body = "Don't break your streak — tap to complete.",
+                )
+                ReminderScheduler.rescheduleFromIntent(appContext, intent)
             } finally {
                 pending.finish()
             }

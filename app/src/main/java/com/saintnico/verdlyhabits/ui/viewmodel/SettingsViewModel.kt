@@ -263,14 +263,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         uploadUri,
                     )
                     if (uploadedUrl != null) {
+                        // Cache-bust local display so Coil reloads after overwriting the same Storage path.
+                        val stamp = System.currentTimeMillis()
                         publicPhotoUrl = uploadedUrl
-                        localPhotoUri = uploadedUrl
+                        localPhotoUri = if (uploadedUrl.contains("?")) {
+                            "$uploadedUrl&t=$stamp"
+                        } else {
+                            "$uploadedUrl?t=$stamp"
+                        }
                     } else {
+                        // Keep the durable local file so the avatar still shows on this device.
                         publicPhotoUrl = existingPhotoUri?.takeIf { it.startsWith("http") }
-                        localPhotoUri = publicPhotoUrl
+                        localPhotoUri = durableLocalUri ?: existingPhotoUri
                         shouldRefreshProfileFromCloud = false
                         _errorEvent.emit(
-                            "Photo could not upload to Firebase. Name and bio were saved — try the photo again after deploying Storage rules.",
+                            "Photo saved on this device, but cloud upload failed. Deploy Storage rules, then save again.",
                         )
                     }
                 }

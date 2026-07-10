@@ -172,12 +172,13 @@ fun SettingsScreen(
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (userPhotoUri != null) {
-                            coil.compose.AsyncImage(
-                                model = userPhotoUri,
+                        if (!userPhotoUri.isNullOrBlank()) {
+                            com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                                photoUri = userPhotoUri,
+                                size = 52.dp,
                                 contentDescription = "Profile Picture",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                fallbackTint = MaterialTheme.colorScheme.primary,
+                                fallbackBackground = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                             )
                         } else {
                             Text(

@@ -187,7 +187,12 @@ fun ProfileSetupScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             if (photoUri != null) {
-                                AsyncImage(photoUri, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                                    photoUri = photoUri,
+                                    size = 110.dp,
+                                    fallbackTint = primaryColor,
+                                    fallbackBackground = primaryColor.copy(alpha = 0.1f),
+                                )
                             } else {
                                 Icon(Icons.Default.CameraAlt, null, tint = primaryColor, modifier = Modifier.size(36.dp))
                             }

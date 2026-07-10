@@ -146,11 +146,12 @@ fun ProfileScreen(
                     }
 
                     if (!userPhotoUri.isNullOrBlank()) {
-                        AsyncImage(
-                            model = userPhotoUri,
+                        com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                            photoUri = userPhotoUri,
+                            size = 90.dp,
                             contentDescription = "Avatar",
-                            modifier = Modifier.size(90.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop
+                            fallbackTint = accent,
+                            fallbackBackground = accent.copy(alpha = 0.12f),
                         )
                     } else {
                         Box(
