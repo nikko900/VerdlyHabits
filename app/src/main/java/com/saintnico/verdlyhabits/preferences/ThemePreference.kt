@@ -213,7 +213,16 @@ class ThemePreference(private val context: Context) {
                 val currentLocalPhoto = prefs[USER_PHOTO_URI]
                 val photoUrl = userDoc.getString("photoUrl") ?: user.photoUrl?.toString()
                 when {
-                    !photoUrl.isNullOrBlank() -> prefs[USER_PHOTO_URI] = photoUrl
+                    !photoUrl.isNullOrBlank() -> {
+                        // Prefer cloud URL; keep any local cache-bust query if same base path.
+                        val localBase = currentLocalPhoto?.substringBefore("?")
+                        val cloudBase = photoUrl.substringBefore("?")
+                        if (localBase != null && localBase == cloudBase && currentLocalPhoto.contains("?")) {
+                            prefs[USER_PHOTO_URI] = currentLocalPhoto
+                        } else {
+                            prefs[USER_PHOTO_URI] = photoUrl
+                        }
+                    }
                     currentLocalPhoto?.startsWith("file:") == true -> {
                         val path = android.net.Uri.parse(currentLocalPhoto).path
                         val stillExists = path != null && java.io.File(path).exists()
@@ -222,6 +231,10 @@ class ThemePreference(private val context: Context) {
                         } else {
                             prefs.remove(USER_PHOTO_URI)
                         }
+                    }
+                    !currentLocalPhoto.isNullOrBlank() -> {
+                        // Keep whatever we already have (e.g. pending local upload).
+                        prefs[USER_PHOTO_URI] = currentLocalPhoto
                     }
                     else -> prefs.remove(USER_PHOTO_URI)
                 }

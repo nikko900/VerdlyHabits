@@ -37,8 +37,16 @@ val dmSansFamily = FontFamily(
     Font(googleFont = GoogleFont("DM Sans"), fontProvider = googleFontProvider, weight = FontWeight.ExtraBold)
 )
 
+/** Same mono stack as saintnico.site — labels, codes, streetwise accents. */
+val jetBrainsMonoFamily = FontFamily(
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = googleFontProvider, weight = FontWeight.Normal),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = googleFontProvider, weight = FontWeight.Medium),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = googleFontProvider, weight = FontWeight.Bold),
+)
+
 /**
- * App-wide typography: DM Serif Display (headings) + DM Sans (body).
+ * App-wide typography: Fraunces / DM Serif (headings) + DM Sans (body) + JetBrains Mono (accents).
+ * Matches the saintnico.site editorial stack.
  */
 object VerdlyTypography {
     val material: Typography by lazy {

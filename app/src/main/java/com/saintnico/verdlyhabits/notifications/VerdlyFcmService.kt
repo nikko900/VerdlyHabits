@@ -1,6 +1,5 @@
 package com.saintnico.verdlyhabits.notifications
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -26,7 +25,8 @@ class VerdlyFcmService : FirebaseMessagingService() {
 
     override fun onCreate() {
         super.onCreate()
-        createChannels()
+        // Pre-create with defaults; showNotification() recreates with live prefs before each push.
+        createChannels(vibrationEnabled = true, soundEnabled = true)
     }
 
     override fun onNewToken(token: String) {
@@ -61,6 +61,11 @@ class VerdlyFcmService : FirebaseMessagingService() {
         }.getOrDefault(false)
         if (!notificationsEnabled) return
 
+        val (vibrationEnabled, soundEnabled) = runCatching {
+            runBlocking { NotificationHelper.readAlertPrefs(this@VerdlyFcmService) }
+        }.getOrDefault(true to true)
+        createChannels(vibrationEnabled, soundEnabled)
+
         // Deep link: social notifications open Activity hub; challenge ones open arena.
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -75,7 +80,7 @@ class VerdlyFcmService : FirebaseMessagingService() {
                 route == "home" -> {
                     putExtra(com.saintnico.verdlyhabits.widget.WidgetNavigation.EXTRA_ROUTE, com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_HOME)
                 }
-                type in setOf("friend_request", "arena_invite") || route == "notifications" -> {
+                type in setOf("friend_request", "arena_invite", "nudge") || route == "notifications" -> {
                     putExtra("open_notifications", true)
                 }
                 else -> {
@@ -93,7 +98,7 @@ class VerdlyFcmService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, channelFor(type))
+        val builder = NotificationCompat.Builder(this, channelFor(type))
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
@@ -102,56 +107,66 @@ class VerdlyFcmService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setContentIntent(pendingIntent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .build()
+
+        if (vibrationEnabled) {
+            builder.setVibrate(NotificationHelper.REMINDER_VIBRATE_PATTERN)
+        } else {
+            builder.setVibrate(longArrayOf(0))
+        }
+        if (soundEnabled) {
+            builder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+        } else {
+            builder.setSound(null)
+        }
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        manager.notify(System.currentTimeMillis().toInt(), builder.build())
     }
 
     private fun channelFor(type: String): String = when (type) {
         "took_lead", "overtaken", "climbed" -> CHANNEL_LEADERBOARD
         "proof_posted", "reaction_received" -> CHANNEL_SOCIAL
-        "friend_request", "duo_invite", "arena_invite", "duo_buddy_done", "duo_milestone" -> CHANNEL_CONNECTIONS
+        "friend_request", "duo_invite", "arena_invite", "duo_buddy_done", "duo_milestone", "nudge" -> CHANNEL_CONNECTIONS
         else -> CHANNEL_CHALLENGES
     }
 
-    private fun createChannels() {
+    private fun createChannels(vibrationEnabled: Boolean, soundEnabled: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_CONNECTIONS,
-                "Connections",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Friend requests, duo streak invites, and arena requests" }
+        NotificationHelper.ensureChannel(
+            context = this,
+            channelId = CHANNEL_CONNECTIONS,
+            channelName = "Connections",
+            importance = NotificationManager.IMPORTANCE_HIGH,
+            vibrationEnabled = vibrationEnabled,
+            soundEnabled = soundEnabled,
+            description = "Friend requests, duo invites, arena requests, and nudges",
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_LEADERBOARD,
-                "Leaderboard",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "When you take the lead, climb, or get overtaken" }
+        NotificationHelper.ensureChannel(
+            context = this,
+            channelId = CHANNEL_LEADERBOARD,
+            channelName = "Leaderboard",
+            importance = NotificationManager.IMPORTANCE_HIGH,
+            vibrationEnabled = vibrationEnabled,
+            soundEnabled = soundEnabled,
+            description = "When you take the lead, climb, or get overtaken",
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_SOCIAL,
-                "Proofs & Reactions",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "When rivals post proof or react to yours" }
+        NotificationHelper.ensureChannel(
+            context = this,
+            channelId = CHANNEL_SOCIAL,
+            channelName = "Proofs & Reactions",
+            importance = NotificationManager.IMPORTANCE_HIGH,
+            vibrationEnabled = vibrationEnabled,
+            soundEnabled = soundEnabled,
+            description = "When rivals post proof or react to yours",
         )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_CONNECTIONS,
-                "Connections",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Friend requests, duo invites, and arena requests" }
-        )
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_CHALLENGES,
-                "Challenge Updates",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "General challenge updates and reminders" }
+        NotificationHelper.ensureChannel(
+            context = this,
+            channelId = CHANNEL_CHALLENGES,
+            channelName = "Challenge Updates",
+            importance = NotificationManager.IMPORTANCE_DEFAULT,
+            vibrationEnabled = vibrationEnabled,
+            soundEnabled = soundEnabled,
+            description = "General challenge updates and reminders",
         )
     }
 }

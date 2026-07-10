@@ -5,6 +5,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.saintnico.verdlyhabits.data.model.InboxNotification
 import com.saintnico.verdlyhabits.data.model.InboxNotificationType
+import com.saintnico.verdlyhabits.data.model.NudgeSurface
 import com.saintnico.verdlyhabits.data.remote.firestore.FriendRepository
 import com.saintnico.verdlyhabits.data.remote.firestore.InboxRepository
 import kotlinx.coroutines.tasks.await
@@ -80,6 +81,58 @@ object SocialNotificationDispatcher {
                 "referenceId" to requestId,
                 "challengeId" to challengeId,
             ),
+        )
+    }
+
+    /**
+     * Sends a "nudge" — a friend/duo-buddy/rival poking this user with a chosen message.
+     * Writes an inbox card (informational only, no accept/decline) and queues a push.
+     * Caller is responsible for its own cooldown check ([NudgeRepository]) so this never
+     * fires more often than the UI already allows.
+     */
+    suspend fun notifyNudge(
+        targetUid: String,
+        fromUsername: String,
+        fromPhotoUrl: String?,
+        message: String,
+        surface: NudgeSurface,
+        contextId: String? = null,
+    ) {
+        if (targetUid.isBlank()) return
+        val name = fromUsername.ifBlank { "Someone" }
+        val actorUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        val referenceId = "nudge_${actorUid}_${System.currentTimeMillis()}"
+        val route = if (surface == NudgeSurface.DUO) "home" else "notifications"
+
+        val write = inbox.writeNotification(
+            targetUid = targetUid,
+            notification = InboxNotification(
+                id = referenceId,
+                type = InboxNotificationType.NUDGE,
+                title = "@$name nudged you",
+                body = message,
+                actorUid = actorUid,
+                actorUsername = fromUsername,
+                actorPhotoUrl = fromPhotoUrl,
+                referenceId = referenceId,
+                challengeId = contextId?.takeIf { surface == NudgeSurface.CHALLENGE },
+                route = route,
+                actionState = "none",
+            ),
+        )
+        if (write.isFailure) {
+            Log.w(TAG, "inbox write failed (NUDGE): ${write.exceptionOrNull()?.message}")
+        }
+        queuePush(
+            targetUid = targetUid,
+            type = "nudge",
+            title = "@$name nudged you",
+            body = message,
+            challengeId = contextId?.takeIf { surface == NudgeSurface.CHALLENGE }.orEmpty(),
+            data = buildMap {
+                put("route", route)
+                put("referenceId", referenceId)
+            },
         )
     }
 

@@ -123,25 +123,33 @@ class UserRepository {
         val user = auth.currentUser ?: return null
         return try {
             user.getIdToken(true).await()
+            val bytes = when (uri.scheme) {
+                "file" -> {
+                    val path = uri.path ?: return null
+                    val file = java.io.File(path)
+                    if (!file.exists() || file.length() == 0L) return null
+                    file.readBytes()
+                }
+                else -> context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } ?: return null
+
+            if (bytes.isEmpty()) {
+                android.util.Log.e("UserRepository", "Upload aborted — empty image bytes")
+                return null
+            }
+
             val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance().reference
                 .child("profile_pictures/${user.uid}.jpg")
             val metadata = com.google.firebase.storage.StorageMetadata.Builder()
                 .setContentType("image/jpeg")
+                .setCacheControl("public,max-age=3600")
                 .build()
 
-            android.util.Log.d("UserRepository", "Uploading photo to: ${storageRef.path}")
-
-            val inputStream = when (uri.scheme) {
-                "file" -> {
-                    val path = uri.path ?: return null
-                    java.io.FileInputStream(java.io.File(path))
-                }
-                else -> context.contentResolver.openInputStream(uri)
-            } ?: return null
-
-            inputStream.use { stream ->
-                storageRef.putStream(stream, metadata).await()
-            }
+            android.util.Log.d(
+                "UserRepository",
+                "Uploading photo to ${storageRef.path} (${bytes.size} bytes)",
+            )
+            storageRef.putBytes(bytes, metadata).await()
             val url = storageRef.downloadUrl.await().toString()
             android.util.Log.d("UserRepository", "Upload success: $url")
             url
