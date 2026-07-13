@@ -11,6 +11,7 @@ enum class InboxNotificationType(val category: NotificationCategory) {
     FRIEND_REQUEST(NotificationCategory.CONNECTIONS),
     DUO_INVITE(NotificationCategory.CONNECTIONS),
     ARENA_INVITE(NotificationCategory.ARENA),
+    NUDGE(NotificationCategory.CONNECTIONS),
     CHALLENGE_UPDATE(NotificationCategory.ACTIVITY),
     SYSTEM(NotificationCategory.ACTIVITY),
 }

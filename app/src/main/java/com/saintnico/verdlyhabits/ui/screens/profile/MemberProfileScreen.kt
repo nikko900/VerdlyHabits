@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SportsScore
 import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.SentimentSatisfied
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,6 +139,7 @@ fun MemberProfileScreen(
     val myUsername by settingsViewModel.userUsername.collectAsState()
     var joinRequestPending by remember { mutableStateOf(false) }
     var showReportSheet by remember { mutableStateOf(false) }
+    var nudgeTarget by remember { mutableStateOf<com.saintnico.verdlyhabits.ui.components.social.NudgeTarget?>(null) }
 
     LaunchedEffect(memberUid) {
         if (memberUid.isBlank()) {
@@ -403,6 +405,14 @@ fun MemberProfileScreen(
                             canInviteToDuo = canInviteToDuo && relationship == FriendRelationship.Friends,
                             onInviteToDuo = onInviteToDuo?.let { invite ->
                                 { invite(p.username.ifBlank { "rival" }, p.photoUrl) }
+                            },
+                            onNudge = {
+                                nudgeTarget = com.saintnico.verdlyhabits.ui.components.social.NudgeTarget(
+                                    uid = memberUid,
+                                    username = p.username.ifBlank { p.displayName.ifBlank { "rival" } },
+                                    photoUrl = p.photoUrl,
+                                    surface = com.saintnico.verdlyhabits.data.model.NudgeSurface.PROFILE,
+                                )
                             },
                             onConnect = {
                                 if (FirebaseAuth.getInstance().currentUser == null) {
@@ -696,6 +706,13 @@ fun MemberProfileScreen(
             },
         )
     }
+
+    com.saintnico.verdlyhabits.ui.components.social.NudgeSheetHost(
+        target = nudgeTarget,
+        onDismiss = { nudgeTarget = null },
+        onSent = { onShowNotification("Nudge sent", false, null) },
+        onError = { message -> onShowNotification(message, true, null) },
+    )
 }
 
 @Composable
@@ -704,6 +721,7 @@ private fun FriendActionRow(
     isSelf: Boolean,
     canInviteToDuo: Boolean = false,
     onInviteToDuo: (() -> Unit)? = null,
+    onNudge: (() -> Unit)? = null,
     onConnect: () -> Unit,
     onAcceptIncoming: () -> Unit,
     onDeclineIncoming: () -> Unit,
@@ -715,18 +733,38 @@ private fun FriendActionRow(
             when (relationship) {
                 FriendRelationship.Friends -> {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                disabledContentColor = onBg.copy(alpha = 0.75f),
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, outline),
-                        ) {
-                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.size(8.dp))
-                            Text("Connected", fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    disabledContentColor = onBg.copy(alpha = 0.75f),
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, outline),
+                            ) {
+                                Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.size(8.dp))
+                                Text("Connected", fontWeight = FontWeight.Bold)
+                            }
+                            if (onNudge != null) {
+                                Button(
+                                    onClick = onNudge,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = com.saintnico.verdlyhabits.ui.components.social.NudgeAccent,
+                                    ),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Bolt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = Color.White,
+                                    )
+                                    Spacer(Modifier.size(8.dp))
+                                    Text("Nudge", fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
                         }
                         if (canInviteToDuo && onInviteToDuo != null) {
                             Button(

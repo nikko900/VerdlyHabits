@@ -601,14 +601,17 @@ fun HomeScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "$timeGreeting, $displayName.",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onBackground
+                                    fontFamily = com.saintnico.verdlyhabits.ui.theme.frauncesFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 26.sp,
+                                    lineHeight = 32.sp,
+                                    color = MaterialTheme.colorScheme.onBackground,
                                 )
                                 Text(
                                     moodCopy,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                                    fontFamily = com.saintnico.verdlyhabits.ui.theme.dmSansFamily,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
                                 )
                             }
                             ShieldBadge(shieldCount)

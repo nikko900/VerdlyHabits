@@ -44,7 +44,7 @@ class GoalReminderReceiver : BroadcastReceiver() {
     private suspend fun showWeeklyCheckIn(context: Context) {
         val goals = AppDatabase.getDatabase(context).goalsDao().getActiveGoals().first()
         if (goals.isEmpty()) return
-        NotificationHelper.showReminder(
+        NotificationHelper.showReminderRespectingPrefs(
             context = context,
             notificationId = 1001,
             channelId = "goal_weekly_check_in",
@@ -72,7 +72,7 @@ class GoalReminderReceiver : BroadcastReceiver() {
                 "Open Verdly and log progress on \"${goal.title}\" today."
         }
 
-        NotificationHelper.showReminder(
+        NotificationHelper.showReminderRespectingPrefs(
             context = context,
             notificationId = 1002,
             channelId = "goal_daily_reminder",
