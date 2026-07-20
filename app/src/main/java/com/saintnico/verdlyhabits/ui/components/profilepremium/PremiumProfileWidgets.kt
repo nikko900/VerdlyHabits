@@ -98,22 +98,12 @@ fun PremiumProfileHero(
                         .background(accent.heroBottom.copy(alpha = 0.9f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (!photoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = photoUrl,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape),
-                        )
-                    } else {
-                        Text(
-                            (displayName.ifBlank { username }).firstOrNull()?.uppercase() ?: "?",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 28.sp,
-                            color = accent.highlight,
-                        )
-                    }
+                    com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                        photoUri = photoUrl,
+                        size = 72.dp,
+                        fallbackTint = accent.highlight,
+                        fallbackBackground = accent.heroBottom.copy(alpha = 0.9f),
+                    )
                 }
                 Spacer(Modifier.size(16.dp))
                 Column(Modifier.weight(1f)) {

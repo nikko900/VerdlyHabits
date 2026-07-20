@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SportsScore
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material3.Button
@@ -483,6 +484,7 @@ private fun iconForType(type: InboxNotificationType): ImageVector = when (type) 
     InboxNotificationType.FRIEND_REQUEST -> Icons.Default.PersonAdd
     InboxNotificationType.DUO_INVITE -> Icons.Default.SportsScore
     InboxNotificationType.ARENA_INVITE -> Icons.Default.Groups
+    InboxNotificationType.NUDGE -> Icons.Rounded.Bolt
     InboxNotificationType.CHALLENGE_UPDATE -> Icons.Rounded.Celebration
     InboxNotificationType.SYSTEM -> Icons.Rounded.NotificationsNone
 }
@@ -491,6 +493,7 @@ private fun accentForType(type: InboxNotificationType): Color = when (type) {
     InboxNotificationType.FRIEND_REQUEST -> Color(0xFF74C69D)
     InboxNotificationType.DUO_INVITE -> Color(0xFF52B788)
     InboxNotificationType.ARENA_INVITE -> Color(0xFF90CAF9)
+    InboxNotificationType.NUDGE -> Color(0xFFFF7A45)
     InboxNotificationType.CHALLENGE_UPDATE -> Color(0xFFFFB74D)
     InboxNotificationType.SYSTEM -> Color(0xFF95D5B2)
 }
