@@ -289,22 +289,13 @@ fun EditProfileScreen(
                                     },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (photoUri != null) {
-                                    AsyncImage(
-                                        model = photoUri,
-                                        contentDescription = "Profile picture",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                } else {
-                                    Text(
-                                        text = (displayName.ifBlank { username }.ifBlank { "U" })
-                                            .firstOrNull()?.toString()?.uppercase() ?: "U",
-                                        style = MaterialTheme.typography.displayMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = primaryColor,
-                                    )
-                                }
+                                com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                                    photoUri = photoUri,
+                                    size = 120.dp,
+                                    contentDescription = "Profile picture",
+                                    fallbackTint = primaryColor,
+                                    fallbackBackground = primaryColor.copy(alpha = 0.1f),
+                                )
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()

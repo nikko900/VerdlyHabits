@@ -29,7 +29,9 @@ import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -359,6 +361,7 @@ fun PremiumStandingRow(
     todayStr: String,
     onProfileClick: (String) -> Unit,
     onProofClick: (userId: String, photoUrl: String) -> Unit,
+    onNudgeClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val name = challenge.memberNames[userId] ?: "Unknown"
@@ -469,6 +472,20 @@ fun PremiumStandingRow(
                     "$streak day streak",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                )
+            }
+        }
+
+        if (!isMe && onNudgeClick != null) {
+            IconButton(
+                onClick = { onNudgeClick(userId) },
+                modifier = Modifier.size(30.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.Bolt,
+                    contentDescription = "Nudge $name",
+                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }

@@ -632,7 +632,8 @@ fun ChallengeScreen(
                 selectedChallenge = null
                 onShowNotification?.invoke("Challenge ended", false)
             },
-            onViewProof = { proofViewer = it }
+            onViewProof = { proofViewer = it },
+            onShowNotification = onShowNotification,
         )
     }
 
@@ -1205,11 +1206,13 @@ private fun ChallengeDetailSheet(
     onRemoveTodaysProof: () -> Unit,
     onLeave: () -> Unit,
     onEnd: () -> Unit,
-    onViewProof: (ProofViewerArgs) -> Unit
+    onViewProof: (ProofViewerArgs) -> Unit,
+    onShowNotification: ((String, Boolean) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activityItems by viewModel.observeActivity(challenge.id).collectAsState(initial = emptyList())
     var showConnectionsPicker by remember { mutableStateOf(false) }
+    var nudgeTarget by remember { mutableStateOf<com.saintnico.verdlyhabits.ui.components.social.NudgeTarget?>(null) }
     val sheetHaptic = LocalHapticFeedback.current
     // Bound to this sheet's non-null [challenge] so reactions never depend on the parent's
     // selectedChallenge state (the proof viewer can outlive the sheet). Fixes a hard NPE crash.
@@ -1471,7 +1474,23 @@ private fun ChallengeDetailSheet(
                 todayStr,
                 onReact,
                 onNavigateToMemberProfile,
-                onViewProof
+                onViewProof,
+                onNudgeClick = { userId ->
+                    val late = challenge.isLateProof(userId, todayStr)
+                    val posted = challenge.hasCompletedToday(userId, todayStr)
+                    nudgeTarget = com.saintnico.verdlyhabits.ui.components.social.NudgeTarget(
+                        uid = userId,
+                        username = challenge.memberNames[userId] ?: "rival",
+                        photoUrl = challenge.memberPhotos[userId],
+                        surface = com.saintnico.verdlyhabits.data.model.NudgeSurface.CHALLENGE,
+                        situation = if (!posted || late) {
+                            com.saintnico.verdlyhabits.data.model.NudgeSituation.CHALLENGE_BEHIND
+                        } else {
+                            com.saintnico.verdlyhabits.data.model.NudgeSituation.GENERAL
+                        },
+                        contextId = challenge.id,
+                    )
+                },
             )
 
             // Reactions
@@ -1682,6 +1701,13 @@ private fun ChallengeDetailSheet(
             }
         )
     }
+
+    com.saintnico.verdlyhabits.ui.components.social.NudgeSheetHost(
+        target = nudgeTarget,
+        onDismiss = { nudgeTarget = null },
+        onSent = { onShowNotification?.invoke("Nudge sent", false) },
+        onError = { message -> onShowNotification?.invoke(message, true) },
+    )
 }
 
 @Composable
@@ -1794,7 +1820,8 @@ private fun LeaderboardList(
     todayStr: String,
     onReact: (String, String) -> Unit,
     onNavigateToMemberProfile: (String) -> Unit,
-    onViewProof: (ProofViewerArgs) -> Unit
+    onViewProof: (ProofViewerArgs) -> Unit,
+    onNudgeClick: ((String) -> Unit)? = null,
 ) {
     val viewProofFor: (String, String) -> Unit = { userId, url ->
         val displayName = challenge.memberNames[userId] ?: "Unknown"
@@ -1867,6 +1894,7 @@ private fun LeaderboardList(
                     todayStr = todayStr,
                     onProfileClick = onNavigateToMemberProfile,
                     onProofClick = viewProofFor,
+                    onNudgeClick = onNudgeClick,
                 )
             }
         }

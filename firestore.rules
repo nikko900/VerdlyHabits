@@ -290,6 +290,31 @@ service cloud.firestore {
         && request.auth.uid in resource.data.members;
     }
 
+    // --- nudges: lightweight pokes between friends/duo buddies/rivals (doc id: {fromUid}_{toUid}) ---
+    // A single doc per direction throttles repeat sends — the app checks lastSentAt
+    // client-side before allowing another write, so this never stacks up requests.
+    match /nudges/{pairId} {
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/nudges/$(pairId))
+        || resource.data.fromUid == uid()
+        || resource.data.toUid == uid()
+      );
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != uid()
+        && request.resource.data.message is string;
+
+      allow update: if signedIn()
+        && resource.data.fromUid == uid()
+        && request.resource.data.fromUid == resource.data.fromUid
+        && request.resource.data.toUid == resource.data.toUid;
+
+      allow delete: if false;
+    }
+
     // --- referral signups retention bonus flag ---
     match /referrals/{referrerUid}/signups/{refereeUid} {
       allow get: if signedIn()

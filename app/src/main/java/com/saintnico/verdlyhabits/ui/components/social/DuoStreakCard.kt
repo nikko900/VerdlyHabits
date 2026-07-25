@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.LocalFireDepartment
@@ -52,6 +53,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -313,6 +315,7 @@ fun DuoStreakCard(
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onApplyGrace: (() -> Unit)? = null,
+    onNudgeBuddy: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val accent = if (state.streakAtRisk) RiskAmber else Mint
@@ -368,11 +371,34 @@ fun DuoStreakCard(
 
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
     val bgColors = when {
-        state.streakAtRisk -> if (isDark) listOf(Color(0xFF3E2723), Color(0xFF1A0F0F)) else listOf(Color(0xFFFFF3E0), Color(0xFFFFE0B2))
-        state.streakDays >= 30 -> if (isDark) listOf(Color(0xFF2E2207), Color(0xFF161102)) else listOf(Color(0xFFFFF8E1), Color(0xFFFFECB3)) // Legend (Gold)
-        state.streakDays >= 14 -> if (isDark) listOf(Color(0xFF150E28), Color(0xFF090614)) else listOf(Color(0xFFF3E5F5), Color(0xFFE1BEE7)) // Fortnight (Purple)
-        state.streakDays >= 7 -> if (isDark) listOf(Color(0xFF0D1B2A), Color(0xFF060D14)) else listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB)) // Week (Blue)
-        else -> if (isDark) listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surfaceVariant) else listOf(Color(0xFFE8F5E9), Color(0xFFC8E6C9)) // Default (Greenish)
+        state.streakAtRisk -> if (isDark) {
+            listOf(Color(0xFF3A2A1C), Color(0xFF2A2118))
+        } else {
+            listOf(Color(0xFFFFF3E0), Color(0xFFFFE0B2))
+        }
+        state.streakDays >= 30 -> if (isDark) {
+            listOf(Color(0xFF3A3218), Color(0xFF2A2616))
+        } else {
+            listOf(Color(0xFFFFF8E1), Color(0xFFFFECB3))
+        }
+        state.streakDays >= 14 -> if (isDark) {
+            listOf(Color(0xFF2C2438), Color(0xFF221C2E))
+        } else {
+            listOf(Color(0xFFF3E5F5), Color(0xFFE1BEE7))
+        }
+        state.streakDays >= 7 -> if (isDark) {
+            listOf(Color(0xFF1E2A36), Color(0xFF18222C))
+        } else {
+            listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB))
+        }
+        else -> if (isDark) {
+            listOf(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                MaterialTheme.colorScheme.surface,
+            )
+        } else {
+            listOf(Color(0xFFE8F5E9), Color(0xFFC8E6C9))
+        }
     }
 
     // 3D Parallax Tilt Effect
@@ -428,15 +454,15 @@ fun DuoStreakCard(
                     RoundedCornerShape(22.dp),
                 )
                 .border(1.dp, accent.copy(if (state.streakAtRisk) 0.5f else 0.28f), RoundedCornerShape(22.dp))
-                .padding(16.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
                         LottieAnimation(
                             composition = flameComp,
                             progress = { flameProgress },
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(26.dp),
                         )
                     }
                     Spacer(Modifier.width(6.dp))
@@ -444,7 +470,7 @@ fun DuoStreakCard(
                         "Duo streak",
                         fontFamily = frauncesFamily,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     if (state.status == "active" && state.streakDays > 0) {
@@ -455,6 +481,24 @@ fun DuoStreakCard(
                         )
                     }
                     Spacer(Modifier.weight(1f))
+                    val canNudgeBuddy = onNudgeBuddy != null &&
+                        state.status == "active" &&
+                        !state.isIncomingInvite &&
+                        !state.buddyDoneToday
+                    if (canNudgeBuddy) {
+                        IconButton(
+                            onClick = { onNudgeBuddy?.invoke() },
+                            modifier = Modifier.size(30.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Bolt,
+                                contentDescription = "Nudge ${state.buddyUsername.ifBlank { "buddy" }}",
+                                tint = accent,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(2.dp))
+                    }
                     if (state.status == "active") {
                         AnimatedContent(
                             targetState = state.streakDays,
@@ -478,13 +522,13 @@ fun DuoStreakCard(
                 }
 
                 if (state.status == "active" && !state.isIncomingInvite) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     DuoWeekFlameStrip(
                         streakDays = state.streakDays,
                         bothDoneToday = state.bothDoneToday,
                         accent = accent,
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         DuoStreakEngine.vibeLine(
                             streakDays = state.streakDays,
@@ -495,30 +539,31 @@ fun DuoStreakCard(
                             myDone = state.myDoneToday,
                         ),
                         fontFamily = dmSansFamily,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = when {
                             state.streakAtRisk -> RiskAmber
                             state.bothDoneToday -> Mint
                             else -> MaterialTheme.colorScheme.onSurface.copy(0.72f)
                         },
+                        maxLines = 2,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(
                         progress = { countdownProgress.coerceIn(0f, 1f) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(5.dp)
+                            .height(4.dp)
                             .clip(RoundedCornerShape(3.dp)),
                         color = accent,
                         trackColor = MaterialTheme.colorScheme.onSurface.copy(0.1f),
                         strokeCap = StrokeCap.Round,
                     )
-                    Spacer(Modifier.height(5.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         DuoStreakEngine.countdownLabel(state.countdownHours, state.countdownMinutes),
                         fontFamily = dmSansFamily,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = if (state.streakAtRisk) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (state.streakAtRisk) RiskAmber else MaterialTheme.colorScheme.onSurface.copy(0.7f),
                     )
@@ -957,11 +1002,11 @@ private fun DuoMemberColumn(
                 contentAlignment = Alignment.Center,
             ) {
                 if (photoUrl != null) {
-                    AsyncImage(
-                        model = photoUrl,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
+                    com.saintnico.verdlyhabits.ui.components.ProfileAvatar(
+                        photoUri = photoUrl,
+                        size = 44.dp,
+                        fallbackTint = accent,
+                        fallbackBackground = accent.copy(0.12f),
                     )
                 } else {
                     Icon(Icons.Rounded.Person, null, tint = accent, modifier = Modifier.size(22.dp))
