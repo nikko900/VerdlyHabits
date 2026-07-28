@@ -62,6 +62,7 @@ import com.saintnico.verdlyhabits.ui.components.home.HomeWeekPulseStrip
 import com.saintnico.verdlyhabits.engine.MotivationalEngine
 import com.saintnico.verdlyhabits.engine.StatsEngine
 import com.saintnico.verdlyhabits.ui.models.toHabitColor
+import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
@@ -143,6 +144,7 @@ fun HomeScreen(
     val dismissedPillDay by store.trialPillDismissedDay.collectAsState(initial = null)
     val todayIso = java.time.LocalDate.now().toString()
     val showTrialPill = billingViewModel.isInFreeTrial() && !isPro && dismissedPillDay != todayIso
+    var showWrapped by remember { mutableStateOf(false) }
 
     // ── Source of truth ────────────────────────────────────────────────────
     val habits = viewModel.habits
@@ -443,6 +445,9 @@ fun HomeScreen(
     val completedFiltered = visibleAndFiltered.filter { it.isCompleted }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        if (showWrapped) {
+            com.saintnico.verdlyhabits.ui.screens.stats.WrappedStoryScreen(onClose = { showWrapped = false })
+        } else {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             floatingActionButton = {
@@ -461,6 +466,28 @@ fun HomeScreen(
                     .padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // ── Weekly Wrapped Banner ─────────────
+                item {
+                    androidx.compose.material3.Card(
+                        onClick = { showWrapped = true },
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF1B4332))
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color(0xFF52B788), modifier = Modifier.size(32.dp))
+                            Spacer(Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("WEEKLY WRAPPED", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, color = Color(0xFF52B788))
+                                Text("Your habit story is ready", fontFamily = frauncesFamily, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Color.White)
+                            }
+                        }
+                    }
+                }
+
                 // ── Trial pill (dismissible for the rest of the day) ─────────────
                 if (showTrialPill) {
                     item {
@@ -969,6 +996,7 @@ fun HomeScreen(
     }
 
     // Paywall is hosted at the navigation root (ModalBottomSheet).
+    }
 }
 
 // ── Sub-composables ──────────────────────────────────────────────────────────

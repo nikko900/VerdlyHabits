@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.FormatQuote
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Timer
@@ -118,6 +119,7 @@ fun StatsScreen(
     val daysSinceInstall = (System.currentTimeMillis() - installDateMillis) / dayMs
     val shouldGateAnalytics = !hasFullAccess && daysSinceInstall >= 3
     var analyticsPrompted by remember { mutableStateOf(false) }
+    var showWrapped by remember { mutableStateOf(false) }
 
     LaunchedEffect(shouldGateAnalytics, analyticsPrompted) {
         if (shouldGateAnalytics && !analyticsPrompted) {
@@ -288,7 +290,7 @@ fun StatsScreen(
 
                 // ── Year in review teaser (locked) ────────────────────
                 item {
-                    YearInReviewTeaser()
+                    YearInReviewTeaser(onClick = { showWrapped = true })
                 }
 
                 item { Spacer(Modifier.height(32.dp)) }
@@ -297,6 +299,10 @@ fun StatsScreen(
             if (shouldGateAnalytics) {
                 PaywallOverlay(onUnlock = { onRequestPaywall(PaywallTrigger.Analytics) })
             }
+        }
+        
+        if (showWrapped) {
+            WrappedStoryScreen(onClose = { showWrapped = false })
         }
     }
 }
@@ -987,8 +993,9 @@ private fun AchievementChip(achievement: Achievement) {
 // ── Year in review teaser ─────────────────────────────────────────────────────
 
 @Composable
-private fun YearInReviewTeaser() {
+private fun YearInReviewTeaser(onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1005,10 +1012,10 @@ private fun YearInReviewTeaser() {
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Lock, null, tint = Purple.copy(0.6f), modifier = Modifier.size(18.dp))
+                    Icon(Icons.Rounded.PlayArrow, null, tint = Purple.copy(0.6f), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        "YEAR IN REVIEW",
+                        "WEEKLY WRAPPED",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.5.sp,
@@ -1017,14 +1024,14 @@ private fun YearInReviewTeaser() {
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Your wrapped story is brewing",
+                    "Your habit story is ready",
                     fontFamily = frauncesFamily,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 18.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "A cinematic recap of your best streaks, wins, and milestones — coming soon for Pro members.",
+                    "Play your cinematic recap of streaks, wins, and milestones.",
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),

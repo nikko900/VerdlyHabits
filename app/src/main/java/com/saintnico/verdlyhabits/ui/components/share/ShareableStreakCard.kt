@@ -121,15 +121,16 @@ fun shareStreakCardWithImage(
     headline: String,
     habitName: String,
 ) {
-    val activity = context.findActivity() ?: return
     val fullCode = ReferralManager.getReferralCode(context)
     val pathCode = referralPathCode(fullCode)
-    ShareCompat.IntentBuilder(activity)
-        .setType("text/plain")
-        .setText(
-            "$headline — $habitName\nI'm building better habits with Verdly. Join free: verdly.app/r/$pathCode",
-        )
-        .startChooser()
+    com.saintnico.verdlyhabits.utils.StreakCardExporter.exportAndShare(
+        context = context,
+        headline = headline,
+        habitName = habitName,
+        referralCode = pathCode,
+        theme = com.saintnico.verdlyhabits.utils.StreakCardTheme.EmeraldDark,
+        plantProgress = 1f
+    )
 }
 
 fun shareReferralInviteCard(
