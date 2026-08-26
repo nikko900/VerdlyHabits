@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.saintnico.verdlyhabits.domain.HabitScheduling
 import com.saintnico.verdlyhabits.ui.screens.home.HabitItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
@@ -30,8 +31,17 @@ data class WrappedSnapshot(
     val bestDayOfWeek: String,
     val bestHabitName: String,
     val bestConsecutiveStreak: Int,
+    val bestHabitThisWeekCompletions: Int,
     val personaName: String,
     val personaDescription: String,
+    val weekDayStats: List<DayWrappedStat>,
+    val weekCompletionRate: Int,
+)
+
+data class DayWrappedStat(
+    val label: String,
+    val scheduled: Int,
+    val completed: Int,
 )
 
 object WrappedInsightsEngine {
@@ -94,6 +104,34 @@ object WrappedInsightsEngine {
         val bestConsecutiveStreak = active.maxOfOrNull { longestConsecutive(it.completedDates) }
             ?.coerceAtLeast(ranked?.streak ?: 0)
             ?: 0
+        val bestHabitThisWeekCompletions = ranked?.completedDates
+            ?.count { raw ->
+                parseDate(raw)?.let { it in thisWeekStart..today } == true
+            } ?: 0
+
+        val weekDayStats = (6 downTo 0).map { offset ->
+            val date = today.minusDays(offset.toLong())
+            val dayLabel = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+            val dateStr = date.format(fmt)
+            val scheduled = active.count { habit ->
+                HabitScheduling.isDueOn(habit.frequency, habit.customDaysMask, date)
+            }
+            val completed = active.count { habit ->
+                habit.completedDates.contains(dateStr)
+            }
+            DayWrappedStat(
+                label = dayLabel,
+                scheduled = scheduled,
+                completed = completed.coerceAtMost(scheduled.coerceAtLeast(0)),
+            )
+        }
+        val totalScheduled = weekDayStats.sumOf { it.scheduled }
+        val totalDone = weekDayStats.sumOf { it.completed }
+        val weekCompletionRate = if (totalScheduled > 0) {
+            ((totalDone.toFloat() / totalScheduled.toFloat()) * 100f).roundToInt()
+        } else {
+            0
+        }
 
         val (personaName, personaDescription) = persona(
             totalCompletions = totalCompletions,
@@ -111,8 +149,11 @@ object WrappedInsightsEngine {
             bestDayOfWeek = bestDay,
             bestHabitName = bestHabitName,
             bestConsecutiveStreak = bestConsecutiveStreak,
+            bestHabitThisWeekCompletions = bestHabitThisWeekCompletions,
             personaName = personaName,
             personaDescription = personaDescription,
+            weekDayStats = weekDayStats,
+            weekCompletionRate = weekCompletionRate,
         )
     }
 
@@ -179,6 +220,7 @@ object WrappedInsightsEngine {
                             "bestHabitName" to snapshot.bestHabitName,
                             "bestConsecutiveStreak" to snapshot.bestConsecutiveStreak,
                             "personaName" to snapshot.personaName,
+                            "weekCompletionRate" to snapshot.weekCompletionRate,
                             "updatedAt" to FieldValue.serverTimestamp(),
                         ),
                     ),

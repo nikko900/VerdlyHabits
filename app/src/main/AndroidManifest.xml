@@ -46,6 +46,15 @@
         </receiver>
 
         <receiver
+            android:name=".streak.StreakAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.saintnico.verdlyhabits.STREAK_AT_RISK" />
+                <action android:name="com.saintnico.verdlyhabits.STREAK_REPAIR_EXPIRED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.HabitsWidgetReceiver"
             android:exported="true"
             android:label="@string/widget_habits_title">

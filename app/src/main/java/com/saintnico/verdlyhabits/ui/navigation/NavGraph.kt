@@ -123,6 +123,30 @@ fun VerdlyNavGraph(
     val hasFullAccess by billingViewModel.hasFullAccess.collectAsState()
     val hasPaidSubscription by billingViewModel.hasPaidSubscription.collectAsState()
 
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val streakRepo = remember { com.saintnico.verdlyhabits.data.streak.StreakRepository.get(appContext) }
+    val streakSnap by streakRepo.snapshot.collectAsState()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val onMainSurface = navBackStackEntry?.destination?.route == Screen.Main.route
+    val habitsReady = habitViewModel.habits.isNotEmpty()
+    val lossToSurface = streakSnap.lossToSurface?.takeIf { onMainSurface && habitsReady }
+    var lossAcknowledging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(paywallTrigger) {
+        val trigger = paywallTrigger ?: return@LaunchedEffect
+        runCatching {
+            com.google.firebase.analytics.FirebaseAnalytics
+                .getInstance(appContext)
+                .logEvent(
+                    "paywall_open",
+                    android.os.Bundle().apply {
+                        putString("trigger_id", trigger.analyticsId)
+                        putString("trigger_class", trigger::class.simpleName)
+                    },
+                )
+        }
+    }
+
     fun showEpicNotification(message: String, isError: Boolean = false, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
         notificationMessage = message
         notificationIsError = isError
@@ -448,6 +472,33 @@ fun VerdlyNavGraph(
             onDismiss = { paywallTrigger = null },
             onRestorePurchases = { billingViewModel.restorePurchases() },
         )
+
+        // Streak repair is offered from Home (banner + tap), not as an interrupt on every open.
+        if (lossToSurface != null && !lossAcknowledging) {
+            val loss = lossToSurface
+            val title = habitViewModel.habits.firstOrNull { it.id == loss.habitId }?.title ?: "Your habit"
+            com.saintnico.verdlyhabits.ui.screens.streak.StreakLostScreen(
+                loss = loss,
+                habitTitle = title,
+                onGetShield = {
+                    lossAcknowledging = true
+                    coroutineScope.launch {
+                        runCatching { streakRepo.acknowledgeLoss(loss.identity) }
+                        lossAcknowledging = false
+                        if (loss.wasPreventableWithShield) {
+                            paywallTrigger = PaywallTrigger.StreakLost(loss.finalStreak, title)
+                        }
+                    }
+                },
+                onDismiss = {
+                    lossAcknowledging = true
+                    coroutineScope.launch {
+                        runCatching { streakRepo.acknowledgeLoss(loss.identity) }
+                        lossAcknowledging = false
+                    }
+                },
+            )
+        }
     }
 }
 

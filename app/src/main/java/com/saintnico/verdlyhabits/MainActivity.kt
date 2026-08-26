@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
         ProfileNudgeScheduler.schedule(this)
         ReminderScheduler.scheduleAll(this)
         GoalReminderScheduler.scheduleAll(this)
+        com.saintnico.verdlyhabits.streak.DayChangeCoordinator.start(this)
 
         enableEdgeToEdge()
         setContent {
@@ -92,6 +93,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        com.saintnico.verdlyhabits.streak.DayChangeCoordinator.onForeground(this)
     }
 
     override fun onNewIntent(intent: Intent) {

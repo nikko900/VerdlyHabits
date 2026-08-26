@@ -1,4 +1,5 @@
 const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -371,60 +372,6 @@ exports.dispatchQueuedNotification = onDocumentCreated("notificationQueue/{id}",
   });
 });
 
-exports.onDuoStreakProgress = onDocumentUpdated("duoStreaks/{pairId}", async (event) => {
-  const before = event.data?.before?.data();
-  const after = event.data?.after?.data();
-  if (!before || !after || after.status !== "active") return;
-
-  const members = members(after.members);
-  if (members.length < 2) return;
-
-  const progressBefore = before.memberProgress || {};
-  const progressAfter = after.memberProgress || {};
-  const today = new Date().toISOString().slice(0, 10);
-
-  for (const uid of members) {
-    const buddyUid = members.find((m) => m !== uid);
-    if (!buddyUid) continue;
-    const wasDone =
-      progressBefore[uid]?.date === today && progressBefore[uid]?.allDone === true;
-    const nowDone =
-      progressAfter[uid]?.date === today && progressAfter[uid]?.allDone === true;
-    const buddyDone =
-      progressAfter[buddyUid]?.date === today && progressAfter[buddyUid]?.allDone === true;
-
-    if (!wasDone && nowDone && buddyDone) {
-      const profile = progressAfter[uid]?.username
-        ? { username: progressAfter[uid].username }
-        : await profileFor(uid);
-      const name = profile.username || "Your buddy";
-      const streak = after.streakDays || 0;
-      await push(buddyUid, {
-        title: "Duo streak — your turn",
-        body: `${name} finished today — don't break the ${Math.max(streak, 1)}-day duo streak!`,
-        type: "duo_buddy_done",
-        route: "duo",
-        referenceId: event.params.pairId,
-      });
-    }
-  }
-
-  const streakBefore = before.streakDays || 0;
-  const streakAfter = after.streakDays || 0;
-  if (streakAfter > streakBefore && [3, 7, 14, 21, 30].includes(streakAfter)) {
-    const title = `Duo streak: ${streakAfter} days!`;
-    for (const uid of members) {
-      await push(uid, {
-        title,
-        body: "You and your buddy hit a milestone — open Verdly to celebrate.",
-        type: "duo_milestone",
-        route: "home",
-        referenceId: event.params.pairId,
-      });
-    }
-  }
-});
-
 // ── 4. Social inbox + push (source of truth for connections notifications) ─
 
 exports.onFriendRequestCreated = onDocumentCreated("friendRequests/{requestId}", async (event) => {
@@ -534,7 +481,8 @@ exports.onDuoStreakProgress = onDocumentUpdated("duoStreaks/{pairId}", async (ev
 
   const progressBefore = before.memberProgress || {};
   const progressAfter = after.memberProgress || {};
-  const today = new Date().toISOString().slice(0, 10);
+  // Prefer the server-closed day when present — client clocks are not authoritative.
+  const today = after.lastBothCompleteDate || serverTodayKey();
 
   for (const uid of memberUids) {
     const buddyUid = memberUids.find((m) => m !== uid);
@@ -574,4 +522,156 @@ exports.onDuoStreakProgress = onDocumentUpdated("duoStreaks/{pairId}", async (ev
       });
     }
   }
+});
+
+// ── Duo day close (server-authoritative) ───────────────────────────────────
+
+function serverTodayKey(zoneOffsetMinutes) {
+  // Admin SDK timestamps are UTC. Pair day boundaries use the caller's reported
+  // offset when provided, otherwise UTC — never a silent client LocalDate.
+  const now = new Date();
+  if (typeof zoneOffsetMinutes === "number" && Number.isFinite(zoneOffsetMinutes)) {
+    const shifted = new Date(now.getTime() + zoneOffsetMinutes * 60_000);
+    return shifted.toISOString().slice(0, 10);
+  }
+  return now.toISOString().slice(0, 10);
+}
+
+/**
+ * Callable: report one partner's daily progress. The function alone may close a duo day
+ * and increment streakDays. Clients must not write lastBothCompleteDate / streakDays /
+ * dayClosed — Firestore rules enforce that.
+ *
+ * Idempotent: first valid allDone from both sides closes the day; subsequent calls are
+ * no-ops for the close, not duplicate increments.
+ */
+exports.reportDuoDayProgress = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first");
+
+  const data = request.data || {};
+  const pairId = String(data.pairId || "");
+  const completed = Number(data.completed || 0);
+  const total = Number(data.total || 0);
+  const allDone = data.allDone === true;
+  const zoneOffsetMinutes = data.zoneOffsetMinutes;
+
+  if (!pairId) throw new HttpsError("invalid-argument", "pairId required");
+
+  const ref = db.collection("duoStreaks").doc(pairId);
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Pair not found");
+    const doc = snap.data() || {};
+    if (doc.status !== "active") throw new HttpsError("failed-precondition", "Pair not active");
+    const mem = members(doc.members);
+    if (!mem.includes(uid)) throw new HttpsError("permission-denied", "Not a member");
+
+    const today = serverTodayKey(zoneOffsetMinutes);
+    const progress = Object.assign({}, doc.memberProgress || {});
+    progress[uid] = {
+      date: today,
+      completed,
+      total,
+      allDone,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    const buddyUid = mem.find((m) => m !== uid);
+    const buddy = buddyUid ? progress[buddyUid] : null;
+    const buddyDone = buddy && buddy.date === today && buddy.allDone === true;
+    const alreadyClosed = doc.lastBothCompleteDate === today || doc.dayClosed === today;
+
+    const updates = {
+      memberProgress: progress,
+    };
+
+    let closedToday = alreadyClosed;
+    let streakDays = Number(doc.streakDays || 0);
+    let milestone = null;
+
+    if (allDone && buddyDone && !alreadyClosed) {
+      streakDays = streakDays + 1;
+      updates.streakDays = streakDays;
+      updates.lastBothCompleteDate = today;
+      updates.dayClosed = today;
+      updates.dayClosedAt = FieldValue.serverTimestamp();
+      closedToday = true;
+
+      const awarded = Array.isArray(doc.milestonesAwarded)
+        ? doc.milestonesAwarded.map((n) => Number(n)).filter((n) => Number.isFinite(n))
+        : [];
+      if ([3, 7, 14, 21, 30].includes(streakDays) && !awarded.includes(streakDays)) {
+        updates.milestonesAwarded = awarded.concat([streakDays]);
+        milestone = streakDays;
+      }
+    }
+
+    tx.update(ref, updates);
+    return {
+      today,
+      closedToday,
+      streakDays,
+      milestone,
+      myDone: allDone,
+      buddyDone: !!buddyDone,
+    };
+  });
+
+  return result;
+});
+
+/**
+ * Callable: gift a swap-a-day to the partner for today or yesterday (server date).
+ * Unlimited; monthKey is recorded for analytics/display only.
+ */
+exports.grantDuoSwap = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first");
+
+  const data = request.data || {};
+  const pairId = String(data.pairId || "");
+  const forDate = String(data.forDate || "");
+  const zoneOffsetMinutes = data.zoneOffsetMinutes;
+  if (!pairId || !/^\d{4}-\d{2}-\d{2}$/.test(forDate)) {
+    throw new HttpsError("invalid-argument", "pairId and forDate (yyyy-MM-dd) required");
+  }
+
+  const today = serverTodayKey(zoneOffsetMinutes);
+  const yesterdayDate = new Date(today + "T12:00:00Z");
+  yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
+  if (forDate !== today && forDate !== yesterday) {
+    throw new HttpsError("failed-precondition", "Swap only allowed for today or yesterday");
+  }
+
+  const ref = db.collection("duoStreaks").doc(pairId);
+  const swapRef = ref.collection("swaps").doc(`${uid}_${forDate}`);
+
+  const outcome = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Pair not found");
+    const doc = snap.data() || {};
+    if (doc.status !== "active") throw new HttpsError("failed-precondition", "Pair not active");
+    const mem = members(doc.members);
+    if (!mem.includes(uid)) throw new HttpsError("permission-denied", "Not a member");
+    const buddyUid = mem.find((m) => m !== uid);
+    if (!buddyUid) throw new HttpsError("failed-precondition", "No buddy");
+
+    const existing = await tx.get(swapRef);
+    if (existing.exists) {
+      return { alreadyGranted: true, forDate, toUid: buddyUid };
+    }
+
+    tx.set(swapRef, {
+      fromUid: uid,
+      toUid: buddyUid,
+      forDate,
+      monthKey: forDate.slice(0, 7),
+      grantedAt: FieldValue.serverTimestamp(),
+    });
+    return { alreadyGranted: false, forDate, toUid: buddyUid };
+  });
+
+  return outcome;
 });

@@ -11,8 +11,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -20,6 +24,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.*
@@ -29,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -45,6 +52,7 @@ import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
 import com.saintnico.verdlyhabits.utils.StreakCardExporter
 import com.saintnico.verdlyhabits.utils.StreakCardTheme
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -57,41 +65,35 @@ fun WrappedStoryScreen(
     val coroutineScope = rememberCoroutineScope()
 
     if (uiState == null) {
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Text("Loading your story…", color = Color.White.copy(0.7f))
+        }
         return
     }
-    
+
     val data = uiState!!
     val totalSlides = 6
-    var currentSlide by rememberSaveable { mutableStateOf(0) }
+    var currentSlide by rememberSaveable { mutableIntStateOf(0) }
     var isPaused by remember { mutableStateOf(false) }
+
+    fun goPrev() {
+        if (currentSlide > 0) currentSlide -= 1
+    }
+
+    fun goNext() {
+        if (currentSlide < totalSlides - 1) currentSlide += 1 else onClose()
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPaused = true
-                        tryAwaitRelease()
-                        isPaused = false
-                    },
-                    onTap = { offset ->
-                        if (offset.x < size.width / 3f) {
-                            if (currentSlide > 0) currentSlide--
-                        } else {
-                            if (currentSlide < totalSlides - 1) currentSlide++ else onClose()
-                        }
-                    }
-                )
-            }
     ) {
-        // Slide Content
         AnimatedContent(
             targetState = currentSlide,
-            transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(400)) },
-            label = "slide_transition"
+            transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(220)) },
+            label = "slide_transition",
+            modifier = Modifier.fillMaxSize(),
         ) { slide ->
             when (slide) {
                 0 -> SlideOpener()
@@ -122,12 +124,48 @@ fun WrappedStoryScreen(
             }
         }
 
-        // Progress Indicators
+        // Left / right navigation zones (leave bottom clear for share CTA on last slide)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = if (currentSlide == totalSlides - 1) 120.dp else 0.dp)
+                .pointerInput(currentSlide) {
+                    detectTapGestures(
+                        onPress = {
+                            isPaused = true
+                            tryAwaitRelease()
+                            isPaused = false
+                        },
+                    )
+                },
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { goPrev() },
+                    ),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(2f)
+                    .fillMaxHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { goNext() },
+                    ),
+            )
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             for (i in 0 until totalSlides) {
                 StoryProgressBar(
@@ -136,20 +174,53 @@ fun WrappedStoryScreen(
                     isCompleted = i < currentSlide,
                     isPaused = isPaused,
                     onComplete = {
-                        if (i == currentSlide) {
-                            if (currentSlide < totalSlides - 1) currentSlide++ else onClose()
-                        }
-                    }
+                        if (i == currentSlide) goNext()
+                    },
                 )
             }
         }
-        
-        // Close Button
+
         IconButton(
             onClick = onClose,
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 8.dp)
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 8.dp),
         ) {
             Icon(Icons.Rounded.Close, "Close", tint = Color.White)
+        }
+
+        // Side chevrons so previous/next are always reachable without blocking share CTA
+        if (currentSlide > 0) {
+            IconButton(
+                onClick = { goPrev() },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 10.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(0.16f)),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+                    contentDescription = "Previous",
+                    tint = Color.White,
+                )
+            }
+        }
+        if (currentSlide < totalSlides - 1) {
+            IconButton(
+                onClick = { goNext() },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 10.dp)
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(0.16f)),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = "Next",
+                    tint = Color.White,
+                )
+            }
         }
     }
 }
@@ -160,116 +231,175 @@ fun StoryProgressBar(
     isActive: Boolean,
     isCompleted: Boolean,
     isPaused: Boolean,
-    onComplete: () -> Unit
+    onComplete: () -> Unit,
 ) {
     val progress = remember { Animatable(0f) }
-    
-    LaunchedEffect(isActive, isPaused) {
-        if (isActive) {
-            if (!isPaused) {
-                val remainingTime = (6000 * (1f - progress.value)).toLong()
-                progress.animateTo(
-                    targetValue = 1f,
-                    animationSpec = tween(durationMillis = remainingTime.toInt(), easing = LinearEasing)
-                )
-                onComplete()
-            }
-        } else {
+    var wasActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isActive, isCompleted, isPaused) {
+        if (!isActive) {
             progress.snapTo(if (isCompleted) 1f else 0f)
+            wasActive = false
+            return@LaunchedEffect
         }
+        if (!wasActive) {
+            progress.snapTo(0f)
+            wasActive = true
+        }
+        if (isPaused) return@LaunchedEffect
+        val remainingMs = (6000f * (1f - progress.value)).toInt().coerceAtLeast(1)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = remainingMs, easing = LinearEasing),
+        )
+        onComplete()
     }
 
     Box(
         modifier = modifier
             .height(3.dp)
             .clip(RoundedCornerShape(1.5.dp))
-            .background(Color.White.copy(alpha = 0.3f))
+            .background(Color.White.copy(alpha = 0.3f)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(progress.value)
-                .background(Color.White)
+                .background(Color.White),
         )
     }
 }
 
 @Composable
 private fun SlideOpener() {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)))
-    Box(modifier = Modifier.fillMaxSize().background(gradient), contentAlignment = Alignment.Center) {
-        Text(
-            text = "Your Habit\nJourney",
-            fontFamily = frauncesFamily,
-            fontSize = 48.sp,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 54.sp
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF050814), Color(0xFF111B36), Color(0xFF15103A)))
+    Box(
+        modifier = Modifier.fillMaxSize().background(gradient).padding(horizontal = 22.dp, vertical = 48.dp),
+    ) {
+        AuroraOrbs()
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "VERDLY\nWRAPPED",
+                fontSize = 14.sp,
+                color = Color(0xFF9EC9FF),
+                letterSpacing = 3.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "Your Habit\nJourney",
+                fontFamily = frauncesFamily,
+                fontSize = 52.sp,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 56.sp
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Built from your real check-ins, streaks, and weekly rhythm.",
+                fontSize = 16.sp,
+                color = Color.White.copy(alpha = 0.82f),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Spacer(Modifier.height(28.dp))
+            FrostedBadge(text = "Tap right to continue")
+        }
+    }
+}
+
+@Composable
+private fun AuroraOrbs() {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawCircle(
+            brush = Brush.radialGradient(listOf(Color(0xAA60A5FA), Color.Transparent)),
+            radius = size.minDimension * 0.42f,
+            center = androidx.compose.ui.geometry.Offset(size.width * 0.24f, size.height * 0.22f),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(listOf(Color(0x887B61FF), Color.Transparent)),
+            radius = size.minDimension * 0.48f,
+            center = androidx.compose.ui.geometry.Offset(size.width * 0.80f, size.height * 0.62f),
         )
     }
 }
 
 @Composable
 private fun SlideConsistency(data: WrappedSnapshot) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF200122), Color(0xFF6f0000)))
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF1A0D1F), Color(0xFF2E1634), Color(0xFF3A1532)))
     Column(
-        modifier = Modifier.fillMaxSize().background(gradient).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(gradient).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("CONSISTENCY", fontSize = 14.sp, color = Color.White.copy(0.7f), letterSpacing = 2.sp)
-        Spacer(Modifier.height(32.dp))
-        Text("${data.totalCompletions}", fontFamily = frauncesFamily, fontSize = 80.sp, color = Color.White)
-        Text("total check-ins", fontSize = 24.sp, color = Color.White.copy(0.9f))
-        Spacer(Modifier.height(48.dp))
-        Text("Across ${data.totalActiveDays} days of building momentum.", fontSize = 18.sp, color = Color.White.copy(0.8f), textAlign = TextAlign.Center)
+        SlideHeader("CONSISTENCY", "How strong your week actually was")
+        Spacer(Modifier.height(22.dp))
+        StatRing(rate = data.weekCompletionRate)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "${data.totalCompletions} total check-ins",
+            fontFamily = frauncesFamily,
+            fontSize = 34.sp,
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Across ${data.totalActiveDays} active days, you finished ${data.weekCompletionRate}% of scheduled habits this week.",
+            fontSize = 16.sp,
+            color = Color.White.copy(0.82f),
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
     }
 }
 
 @Composable
 private fun SlideTrend(data: WrappedSnapshot) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF0D1B2A), Color(0xFF1B263B), Color(0xFF415A77)))
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF071423), Color(0xFF102640), Color(0xFF1B3556)))
     Column(
-        modifier = Modifier.fillMaxSize().background(gradient).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(gradient).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("THIS WEEK", fontSize = 14.sp, color = Color.White.copy(0.7f), letterSpacing = 2.sp)
-        Spacer(Modifier.height(32.dp))
-        
-        Text("${data.thisWeekCompletions}", fontFamily = frauncesFamily, fontSize = 80.sp, color = Color(0xFFE0E1DD))
-        Text("check-ins", fontSize = 24.sp, color = Color.White.copy(0.9f))
-        
-        Spacer(Modifier.height(48.dp))
-        
+        SlideHeader("WEEK PULSE", "Scheduled vs completed by day")
+        Spacer(Modifier.height(20.dp))
+        WeeklyBars(data)
+        Spacer(Modifier.height(20.dp))
+        Text("${data.thisWeekCompletions}", fontFamily = frauncesFamily, fontSize = 62.sp, color = Color(0xFFE0E1DD))
+        Text("completed this week", fontSize = 19.sp, color = Color.White.copy(0.9f))
+        Spacer(Modifier.height(16.dp))
         val trendText = when (data.weeklyTrend) {
             WeeklyTrend.UP -> "Up ${data.trendPercent}% from last week! \uD83D\uDE80"
-            WeeklyTrend.DOWN -> "Rest is part of the process. \uD83C\uDF43"
-            WeeklyTrend.NEUTRAL -> "Holding steady, building discipline. \u2696\uFE0F"
+            WeeklyTrend.DOWN -> "A slower week, still part of the process. \uD83C\uDF43"
+            WeeklyTrend.NEUTRAL -> "Steady cadence. Discipline is compounding. \u2696\uFE0F"
         }
-        
-        Text(trendText, fontSize = 20.sp, color = Color.White.copy(0.8f), textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
+        Text(trendText, fontSize = 18.sp, color = Color.White.copy(0.84f), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
         Text("Best day: ${data.bestDayOfWeek}", fontSize = 16.sp, color = Color.White.copy(0.6f))
     }
 }
 
 @Composable
 private fun SlideTopHabit(data: WrappedSnapshot) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF0A1610), Color(0xFF1B4332)))
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF0A1B14), Color(0xFF153829), Color(0xFF1F4A37)))
     Column(
-        modifier = Modifier.fillMaxSize().background(gradient).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(gradient).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("YOUR CHAMPION", fontSize = 14.sp, color = Color.White.copy(0.7f), letterSpacing = 2.sp)
-        Spacer(Modifier.height(32.dp))
-        Text(data.bestHabitName, fontFamily = frauncesFamily, fontSize = 42.sp, color = Color(0xFFD8F3DC), textAlign = TextAlign.Center, lineHeight = 48.sp)
-        Spacer(Modifier.height(16.dp))
-        Text("Longest streak: ${data.bestConsecutiveStreak} days", fontSize = 20.sp, color = Color.White.copy(0.8f))
-        Spacer(Modifier.height(64.dp))
-        
+        SlideHeader("TOP HABIT", "Your most resilient ritual")
+        Spacer(Modifier.height(24.dp))
+        Text(data.bestHabitName, fontFamily = frauncesFamily, fontSize = 40.sp, color = Color(0xFFD8F3DC), textAlign = TextAlign.Center, lineHeight = 46.sp)
+        Spacer(Modifier.height(14.dp))
+        FrostedBadge(text = "${data.bestHabitThisWeekCompletions} completions this week")
+        Spacer(Modifier.height(10.dp))
+        Text("Longest streak: ${data.bestConsecutiveStreak} days", fontSize = 20.sp, color = Color.White.copy(0.85f))
+        Spacer(Modifier.height(38.dp))
         Box(modifier = Modifier.size(200.dp)) {
             Canvas(Modifier.fillMaxSize()) {
                 drawGrowingPlant(1f, false, 0f)
@@ -280,44 +410,130 @@ private fun SlideTopHabit(data: WrappedSnapshot) {
 
 @Composable
 private fun SlidePersona(data: WrappedSnapshot) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF0B0914), Color(0xFF231A45)))
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF0C0A18), Color(0xFF251B46), Color(0xFF35205C)))
     Column(
-        modifier = Modifier.fillMaxSize().background(gradient).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(gradient).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("YOUR PERSONA", fontSize = 14.sp, color = Color.White.copy(0.7f), letterSpacing = 2.sp)
-        Spacer(Modifier.height(32.dp))
-        Text(data.personaName, fontFamily = frauncesFamily, fontSize = 42.sp, color = Color(0xFFE2D6FF), textAlign = TextAlign.Center, lineHeight = 48.sp)
+        SlideHeader("YOUR PERSONA", "Identity forged by behavior")
+        Spacer(Modifier.height(28.dp))
+        Text(data.personaName, fontFamily = frauncesFamily, fontSize = 46.sp, color = Color(0xFFE2D6FF), textAlign = TextAlign.Center, lineHeight = 50.sp)
         Spacer(Modifier.height(24.dp))
-        Text(data.personaDescription, fontSize = 20.sp, color = Color.White.copy(0.8f), textAlign = TextAlign.Center)
+        Text(data.personaDescription, fontSize = 20.sp, color = Color.White.copy(0.84f), textAlign = TextAlign.Center, lineHeight = 27.sp)
+        Spacer(Modifier.height(20.dp))
+        FrostedBadge(text = "Based on ${data.totalCompletions} real completions")
     }
 }
 
 @Composable
 private fun SlideFinale(data: WrappedSnapshot, onShare: () -> Unit) {
-    val gradient = Brush.verticalGradient(listOf(Color(0xFF1A1505), Color(0xFF42350A)))
+    val gradient = Brush.verticalGradient(listOf(Color(0xFF1A1505), Color(0xFF3A2D0A), Color(0xFF5A4310)))
     Column(
-        modifier = Modifier.fillMaxSize().background(gradient).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(gradient).padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("THAT'S A WRAP", fontSize = 14.sp, color = Color.White.copy(0.7f), letterSpacing = 2.sp)
-        Spacer(Modifier.height(32.dp))
+        SlideHeader("THAT'S A WRAP", "Make your streak visible")
+        Spacer(Modifier.height(28.dp))
         Text("Keep growing.", fontFamily = frauncesFamily, fontSize = 48.sp, color = Color(0xFFFFD700), fontStyle = FontStyle.Italic)
         Spacer(Modifier.height(12.dp))
-        Text(data.personaName, fontSize = 18.sp, color = Color.White.copy(0.7f), textAlign = TextAlign.Center)
-        Spacer(Modifier.height(64.dp))
+        Text("${data.personaName} · ${data.weekCompletionRate}% weekly hit-rate", fontSize = 18.sp, color = Color.White.copy(0.75f), textAlign = TextAlign.Center)
+        Spacer(Modifier.height(42.dp))
         
         Button(
             onClick = onShare,
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD866), contentColor = Color(0xFF241A00)),
             shape = RoundedCornerShape(100.dp),
             modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
         ) {
             Icon(Icons.Rounded.Share, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Share Wrapped Story", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+    }
+}
+
+@Composable
+private fun SlideHeader(title: String, subtitle: String) {
+    Text(title, fontSize = 13.sp, color = Color.White.copy(0.72f), letterSpacing = 2.2.sp)
+    Spacer(Modifier.height(8.dp))
+    Text(subtitle, fontSize = 16.sp, color = Color.White.copy(0.88f), textAlign = TextAlign.Center)
+}
+
+@Composable
+private fun FrostedBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(Color.White.copy(0.12f))
+            .border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(100.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Text(text, fontSize = 13.sp, color = Color.White.copy(0.92f), fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun StatRing(rate: Int) {
+    val accent = when {
+        rate >= 80 -> Color(0xFF52E3A4)
+        rate >= 55 -> Color(0xFFFFC766)
+        else -> Color(0xFFFF8A80)
+    }
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(210.dp)) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(color = Color.White.copy(alpha = 0.12f), style = Stroke(width = 18.dp.toPx()))
+            drawArc(
+                color = accent,
+                startAngle = -90f,
+                sweepAngle = 360f * (rate.coerceIn(0, 100) / 100f),
+                useCenter = false,
+                style = Stroke(width = 18.dp.toPx())
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("${rate.coerceIn(0, 100)}%", fontFamily = frauncesFamily, fontSize = 46.sp, color = Color.White)
+            Text("Weekly hit-rate", fontSize = 14.sp, color = Color.White.copy(0.78f))
+        }
+    }
+}
+
+@Composable
+private fun WeeklyBars(data: WrappedSnapshot) {
+    val maxScheduled = max(1, data.weekDayStats.maxOfOrNull { it.scheduled } ?: 1)
+    Row(
+        modifier = Modifier.fillMaxWidth().height(180.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        data.weekDayStats.forEach { day ->
+            val denom = day.scheduled.coerceAtLeast(1)
+            val completionRatio = (day.completed.toFloat() / denom.toFloat()).coerceIn(0f, 1f)
+            val scheduledHeight = (day.scheduled.toFloat() / maxScheduled.toFloat()).coerceIn(0f, 1f)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height((125f * scheduledHeight).dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(0.2f)),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(completionRatio)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    listOf(Color(0xFF7BE8FF), Color(0xFF4CC9A6))
+                                )
+                            )
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(day.label, fontSize = 11.sp, color = Color.White.copy(0.82f))
+            }
         }
     }
 }
