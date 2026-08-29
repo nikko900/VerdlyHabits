@@ -20,4 +20,6 @@ data class PublicUserProfile(
     /** User-selected title id; null = auto signature on public profile. */
     val equippedTitleId: String? = null,
     val equippedTitleLabel: String? = null,
+    /** Synced membership badge for friends, leaderboards, and public profile. */
+    val membershipTier: MembershipTier = MembershipTier.FREE,
 )

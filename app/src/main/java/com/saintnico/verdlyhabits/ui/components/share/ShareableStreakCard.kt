@@ -92,7 +92,7 @@ fun ShareableStreakCard(
                     color = Color.White.copy(0.45f),
                 )
                 Text(
-                    "Join free: verdly.app/r/$referralCode",
+                    "Join free: ${ReferralManager.shareLinkLabel(referralCode)}",
                     fontSize = 11.sp,
                     color = Color(0xFF95D5B2),
                 )
@@ -159,18 +159,29 @@ fun shareChallengeInviteCard(
     memberCount: Int? = null,
 ) {
     val activity = context.findActivity() ?: return
-    val details = buildString {
-        append("Join my Verdly challenge: $challengeName")
-        if (stake.isNotBlank()) append("\nStake: $stake")
-        append("\nInvite code: $inviteCode")
-        daysRemaining?.let { append("\n$it days left") }
-        memberCount?.let { append("\n$it members already in") }
+    val shareText = com.saintnico.verdlyhabits.challenge.ChallengeInviteHelper.buildShareMessage(
+        challengeName = challengeName,
+        inviteCode = inviteCode,
+        stake = stake,
+        daysRemaining = daysRemaining,
+        memberCount = memberCount,
+    )
+    val shared = com.saintnico.verdlyhabits.utils.ChallengeInviteCardExporter.exportAndShare(
+        context = activity,
+        challengeName = challengeName,
+        inviteCode = inviteCode,
+        stake = stake,
+        daysRemaining = daysRemaining,
+        memberCount = memberCount,
+        shareText = shareText,
+    )
+    if (!shared) {
+        ShareCompat.IntentBuilder(activity)
+            .setType("text/plain")
+            .setText(shareText)
+            .setChooserTitle("Share challenge invite")
+            .startChooser()
     }
-    ShareCompat.IntentBuilder(activity)
-        .setType("text/plain")
-        .setText(details)
-        .setChooserTitle("Share challenge invite")
-        .startChooser()
 }
 
 fun shareGoalCompletionCard(

@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
+import com.saintnico.verdlyhabits.referral.ReferralManager
 import com.saintnico.verdlyhabits.referral.ReferralQrEncoder
 import com.saintnico.verdlyhabits.referral.ReferralShareHelper
 import com.saintnico.verdlyhabits.ui.theme.dmSansFamily
@@ -196,7 +197,7 @@ fun ReferralShareSheet(
                                 modifier = Modifier.scale(copyScale),
                             )
                             Text(
-                                "verdly.app/r/${state.shortCode}",
+                                ReferralManager.shareLinkLabel(state.shortCode),
                                 fontFamily = dmSansFamily,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -270,7 +271,7 @@ fun ReferralShareSheet(
                                     fontSize = 14.sp,
                                 )
                                 Text(
-                                    "Custom verdly.app/r/YOURCODE for campaigns",
+                                    "Custom ${ReferralManager.REFERRAL_WEB_HOST}/${ReferralManager.REFERRAL_WEB_PATH}/YOURCODE for campaigns",
                                     fontFamily = dmSansFamily,
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -292,7 +293,7 @@ fun ReferralShareSheet(
                                 OutlinedButton(
                                     onClick = {
                                         onRegisterVanityCode(vanityInput) { ok, msg ->
-                                            vanityMessage = if (ok) "Live at verdly.app/r/$msg" else msg
+                                            vanityMessage = if (ok) "Live at ${ReferralManager.shareLinkLabel(msg)}" else msg
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth(),

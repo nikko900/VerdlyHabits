@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.FileProvider
+import com.saintnico.verdlyhabits.referral.ReferralManager
 import com.saintnico.verdlyhabits.ui.screens.focus.drawGrowingPlant
 import java.io.File
 import java.io.FileOutputStream
@@ -162,7 +163,12 @@ object StreakCardExporter {
                 nativeCanvas.drawText(habitName, width / 2f, height * 0.72f, paintHabit)
 
                 nativeCanvas.drawText("Built with Verdly", width / 2f, height * 0.88f, paintFooter)
-                nativeCanvas.drawText("verdly.app/r/$referralCode", width / 2f, height * 0.92f, paintReferral)
+                nativeCanvas.drawText(
+                    ReferralManager.shareLinkLabel(referralCode),
+                    width / 2f,
+                    height * 0.92f,
+                    paintReferral,
+                )
             }
         }
 
@@ -187,7 +193,7 @@ object StreakCardExporter {
             stream.close()
 
             val shareUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            val shareText = "$headline — $habitName\nI'm building better habits with Verdly. Join free: verdly.app/r/$referralCode"
+            val shareText = "$headline — $habitName\nI'm building better habits with Verdly. Join free: ${ReferralManager.shareLinkLabel(referralCode)}"
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"

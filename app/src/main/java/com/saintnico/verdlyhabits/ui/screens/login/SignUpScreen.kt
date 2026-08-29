@@ -10,34 +10,67 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import com.saintnico.verdlyhabits.ui.components.immersiveAuthBackground
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
+import com.saintnico.verdlyhabits.data.remote.auth.EmailAuthClient
+import com.saintnico.verdlyhabits.ui.components.immersiveAuthBackground
+import com.saintnico.verdlyhabits.ui.theme.AccentGold
 import com.saintnico.verdlyhabits.util.UserFacingErrors
-import com.saintnico.verdlyhabits.data.remote.firestore.UserRepository
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 @Composable
 fun SignUpScreen(
@@ -52,9 +85,9 @@ fun SignUpScreen(
     var isVisible by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val auth = FirebaseAuth.getInstance()
-    val userRepository = UserRepository()
+    val emailAuthClient = remember { EmailAuthClient(context) }
     val coroutineScope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) { isVisible = true }
 
@@ -64,13 +97,45 @@ fun SignUpScreen(
     val infiniteTransition = rememberInfiniteTransition(label = "plantBounce")
     val plantOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 15f,
+        targetValue = 12f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "plantOffset"
     )
+
+    fun attemptSignUp() {
+        if (isLoading) return
+        if (password != confirmPassword) {
+            Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (email.isBlank() || password.isBlank()) {
+            Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (password.length < 6) {
+            Toast.makeText(context, "Password needs at least 6 characters", Toast.LENGTH_SHORT).show()
+            return
+        }
+        isLoading = true
+        keyboard?.hide()
+        coroutineScope.launch {
+            try {
+                emailAuthClient.signUp(email, password)
+                onSignUpSuccess()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Sign-up failed — ${UserFacingErrors.message(e)}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                isLoading = false
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -80,20 +145,51 @@ fun SignUpScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackToLogin) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+            }
+
             AnimatedVisibility(
                 visible = isVisible,
-                enter = fadeIn(tween(1000)) + slideInVertically(tween(1000), initialOffsetY = { -100 })
+                enter = fadeIn(tween(900)) + slideInVertically(tween(900), initialOffsetY = { -60 })
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 24.dp)
+                ) {
+                    Text(
+                        text = "NEW TO VERDLY",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = AccentGold.copy(alpha = 0.85f),
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                     Box(
                         modifier = Modifier
                             .size(80.dp)
                             .clip(CircleShape)
-                            .background(primary.copy(alpha = 0.18f))
+                            .background(primary.copy(alpha = 0.22f))
                             .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -106,7 +202,7 @@ fun SignUpScreen(
                                 .offset(y = plantOffset.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
                         text = "Plant a Seed",
                         style = MaterialTheme.typography.headlineLarge.copy(
@@ -115,124 +211,143 @@ fun SignUpScreen(
                             fontSize = 32.sp
                         )
                     )
+                    Text(
+                        text = "Create your account and start growing.",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        ),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            val fieldColors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = primary,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                focusedLabelColor = primary,
-                unfocusedLabelColor = Color.White.copy(alpha = 0.4f),
-                cursorColor = primary,
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White.copy(alpha = 0.8f),
-                focusedLeadingIconColor = Color.White.copy(alpha = 0.9f),
-                unfocusedLeadingIconColor = Color.White.copy(alpha = 0.55f)
-            )
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = fieldColors
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = fieldColors,
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            null,
-                            tint = Color.White.copy(alpha = 0.7f)
+                shape = RoundedCornerShape(24.dp),
+                color = Color.White.copy(alpha = 0.06f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    val fieldColors = authFieldColors(primary)
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Email") },
+                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = fieldColors,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
                         )
-                    }
-                }
-            )
+                    )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-            OutlinedTextField(
-                value = confirmPassword,
-                onValueChange = { confirmPassword = it },
-                label = { Text("Confirm Password") },
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = fieldColors
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Brush.horizontalGradient(listOf(primary, tertiary)))
-                    .clickable(enabled = !isLoading) {
-                        if (password != confirmPassword) {
-                            Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
-                            return@clickable
-                        }
-                        if (email.isBlank() || password.isBlank()) {
-                            Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
-                            return@clickable
-                        }
-                        isLoading = true
-                        coroutineScope.launch {
-                            try {
-                                auth.createUserWithEmailAndPassword(email, password).await()
-                                val uid = auth.currentUser?.uid
-                                if (uid != null) {
-                                    com.saintnico.verdlyhabits.session.AccountSessionCoordinator
-                                        .onUserSignedIn(context, uid)
-                                }
-                                userRepository.ensureUserDocument()
-                                com.saintnico.verdlyhabits.referral.ReferralManager.processPendingReferral(context)
-                                onSignUpSuccess()
-                            } catch (e: Exception) {
-                                val errorDetail = UserFacingErrors.message(e)
-                                Toast.makeText(context, "Sign-up failed — $errorDetail", Toast.LENGTH_LONG).show()
-                                println("DEBUG_AUTH: ${e.message}")
-                            } finally {
-                                isLoading = false
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                        visualTransformation = if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Next
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = fieldColors,
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    if (passwordVisible) Icons.Default.Visibility
+                                    else Icons.Default.VisibilityOff,
+                                    null,
+                                    tint = Color.White.copy(alpha = 0.7f)
+                                )
                             }
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Create Account", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text("Confirm Password") },
+                        leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = fieldColors,
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Brush.horizontalGradient(listOf(primary, tertiary))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            onClick = { attemptSignUp() },
+                            modifier = Modifier.fillMaxSize(),
+                            color = Color.Transparent,
+                            enabled = !isLoading
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        "Create Account",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            TextButton(onClick = onBackToLogin) {
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(
+                onClick = onBackToLogin,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    "Already planted? Sign In",
-                    color = Color.White.copy(alpha = 0.5f),
+                    "Already planted? Sign in",
+                    color = Color.White.copy(alpha = 0.55f),
                     fontSize = 14.sp
                 )
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

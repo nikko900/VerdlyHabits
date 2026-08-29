@@ -233,6 +233,7 @@ fun FriendsConnectionsSection(
                                         uid = result.uid,
                                         username = result.username,
                                         photoUrl = result.photoUrl,
+                                        membershipTier = result.membershipTier,
                                     ),
                                 )
                             }
@@ -440,7 +441,7 @@ private fun UsernameSearchResultRow(
                     .clickable(onClick = onViewProfile),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ConnectionsAvatar(result.photoUrl, result.username, primary, 48.dp)
+                ConnectionsAvatar(result.photoUrl, result.username, primary, 48.dp, result.membershipTier)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -536,7 +537,7 @@ private fun IncomingRequestRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ConnectionsAvatar(item.photoUrl, item.username, primary, 44.dp)
+            ConnectionsAvatar(item.photoUrl, item.username, primary, 44.dp, item.membershipTier)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
