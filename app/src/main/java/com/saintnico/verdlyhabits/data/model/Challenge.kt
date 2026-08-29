@@ -104,17 +104,29 @@ data class Challenge(
         }
     }
 
+    private fun dayMs(): Long = 24 * 60 * 60 * 1000L
+
+    fun durationDays(): Int =
+        (((endDate - startDate) / dayMs()).toInt()).coerceAtLeast(1)
+
     fun daysRemaining(): Long {
         val now = System.currentTimeMillis()
         val remaining = endDate - now
-        val dayMs = 24 * 60 * 60 * 1000L
-        return if (remaining > 0) (remaining + dayMs - 1) / dayMs else 0
+        return if (remaining > 0) (remaining + dayMs() - 1) / dayMs() else 0
     }
 
+    /** Calendar days since start (0 on day one). Uncapped — prefer [currentDayIndex] for UI. */
     fun daysElapsed(): Int {
         val elapsed = System.currentTimeMillis() - startDate
-        return (elapsed / (24 * 60 * 60 * 1000L)).toInt().coerceAtLeast(0)
+        return (elapsed / dayMs()).toInt().coerceAtLeast(0)
     }
+
+    /** 1-based day within the challenge window, never above [durationDays]. */
+    fun currentDayIndex(): Int = (daysElapsed() + 1).coerceIn(1, durationDays())
+
+    fun isPastEndDate(): Boolean = System.currentTimeMillis() >= endDate
+
+    fun isEffectivelyActive(): Boolean = isActive && !isArchived && !isPastEndDate()
 
     fun leaderboard(): List<Pair<String, Int>> {
         return when (challengeMode) {
@@ -177,7 +189,7 @@ data class Challenge(
     }
 
     fun completionRate(userId: String): Float {
-        val totalDays = daysElapsed().coerceAtLeast(1)
+        val totalDays = currentDayIndex().coerceAtLeast(1)
         val daysCompleted = completions[userId]?.count { entry ->
             val value = entry.value
             if (value is Boolean) value

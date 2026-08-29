@@ -38,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.saintnico.verdlyhabits.data.model.MembershipTier
+import com.saintnico.verdlyhabits.ui.components.profilepremium.PremiumProfileAvatar
 import com.saintnico.verdlyhabits.ui.theme.frauncesFamily
 import com.saintnico.verdlyhabits.ui.viewmodel.FriendSummary
 
@@ -261,6 +263,7 @@ fun ConnectionsFriendCard(
                 label = friend.username,
                 accent = accent,
                 size = 52.dp,
+                membershipTier = friend.membershipTier,
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -303,7 +306,18 @@ fun ConnectionsAvatar(
     label: String,
     accent: Color,
     size: androidx.compose.ui.unit.Dp,
+    membershipTier: MembershipTier = MembershipTier.FREE,
 ) {
+    if (membershipTier.showsPremiumBadge) {
+        PremiumProfileAvatar(
+            photoUri = photoUrl,
+            size = size,
+            membershipTier = membershipTier,
+            fallbackTint = accent.copy(alpha = 0.9f),
+            fallbackBackground = accent.copy(alpha = 0.12f),
+        )
+        return
+    }
     Box(
         modifier = Modifier
             .size(size)

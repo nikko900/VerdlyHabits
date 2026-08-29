@@ -422,14 +422,15 @@ internal fun ChallengeCardPremium(
     currentUserId: String,
     onClick: () -> Unit,
     isEnded: Boolean = false,
-    todayStr: String
+    todayStr: String,
+    coinStakeAmount: Int? = null,
+    isPremium: Boolean = false,
 ) {
     val leaderboard = challenge.leaderboard()
     val initials = challenge.habitName.split(" ").take(2).joinToString("") { it.firstOrNull()?.uppercase() ?: "" }
         .ifBlank { challenge.habitName.take(2).uppercase() }
-    val dayMs = 24 * 60 * 60 * 1000L
-    val totalDays = (((challenge.endDate - challenge.startDate) / dayMs).toInt()).coerceAtLeast(1)
-    val elapsed = challenge.daysElapsed().coerceAtLeast(0)
+    val totalDays = challenge.durationDays()
+    val elapsed = challenge.currentDayIndex()
     val frac = (elapsed.toFloat() / totalDays.toFloat()).coerceIn(0f, 1f)
     val scheme = MaterialTheme.colorScheme
     val isDark = scheme.isAppearanceDark()
@@ -526,6 +527,14 @@ internal fun ChallengeCardPremium(
                 if (challenge.stake.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     StakeChipRow(challenge.stake)
+                }
+                if (coinStakeAmount != null && coinStakeAmount > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    com.saintnico.verdlyhabits.ui.components.coins.AtStakeChip(
+                        amount = coinStakeAmount,
+                        streak = challenge.streakFor(currentUserId),
+                        isPremium = isPremium,
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 leaderboard.take(3).forEachIndexed { index, (uid, score) ->

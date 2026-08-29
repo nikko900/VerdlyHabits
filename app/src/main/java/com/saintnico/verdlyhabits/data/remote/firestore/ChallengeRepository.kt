@@ -11,6 +11,7 @@ import com.saintnico.verdlyhabits.data.model.ChallengeMode
 import com.saintnico.verdlyhabits.data.model.ChallengeResultSnapshot
 import com.saintnico.verdlyhabits.data.model.ChallengeResultStanding
 import com.saintnico.verdlyhabits.data.model.ChallengeTopPost
+import com.saintnico.verdlyhabits.challenge.ChallengeInviteHelper
 import com.saintnico.verdlyhabits.data.model.ReactionWeights
 import com.saintnico.verdlyhabits.util.ChallengeStreakCalculator
 import com.saintnico.verdlyhabits.util.UserFacingErrors
@@ -452,6 +453,21 @@ class ChallengeRepository {
     private suspend fun resolveChallengeDocumentId(rawInput: String): String? {
         val trimmed = rawInput.trim()
         if (trimmed.isEmpty()) return null
+
+        ChallengeInviteHelper.extractInviteCode(trimmed)?.let { fromLink ->
+            try {
+                val inviteDoc = invitesRef.document(fromLink).get().await()
+                if (inviteDoc.exists()) {
+                    val challengeId = inviteDoc.getString("challengeId")
+                    if (!challengeId.isNullOrBlank()) {
+                        Log.d("ChallengeRepo", "resolve: link/code $fromLink -> $challengeId")
+                        return challengeId
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ChallengeRepo", "resolve: link invite $fromLink failed", e)
+            }
+        }
 
         // 1. 6-letter invite code path
         val lettersOnly = Regex("[^A-Za-z]").replace(trimmed, "").uppercase()

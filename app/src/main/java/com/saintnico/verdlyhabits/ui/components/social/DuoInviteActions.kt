@@ -107,7 +107,7 @@ fun DuoBuddyPickerSheet(
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, Mint.copy(0.35f)),
                     ) {
-                        ConnectionsAvatar(friend.photoUrl, friend.username, accent, 32.dp)
+                        ConnectionsAvatar(friend.photoUrl, friend.username, accent, 32.dp, friend.membershipTier)
                         Spacer(Modifier.width(12.dp))
                         Text(
                             "@${friend.username}",

@@ -40,6 +40,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.saintnico.verdlyhabits.ui.viewmodel.ChallengeViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.CoinViewModel
+import com.saintnico.verdlyhabits.ui.components.coins.CoinBalanceChip
+import com.saintnico.verdlyhabits.ui.components.coins.CoinBurstAnimation
+import com.saintnico.verdlyhabits.ui.components.coins.CoinPackSheet
+import com.saintnico.verdlyhabits.ui.components.coins.GiftArcAnimation
+import com.saintnico.verdlyhabits.ui.components.coins.GiftSupportSheet
+import com.saintnico.verdlyhabits.ui.components.coins.StakeConfirmSheet
+import com.saintnico.verdlyhabits.ui.components.coins.StakeConsistencyCard
 import com.saintnico.verdlyhabits.ui.viewmodel.FriendSummary
 import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.SettingsViewModel
@@ -61,6 +70,9 @@ import com.saintnico.verdlyhabits.data.model.ProofWindowState
 import com.saintnico.verdlyhabits.data.model.ReactionWeights
 import com.saintnico.verdlyhabits.data.remote.firestore.CreatedChallenge
 import com.saintnico.verdlyhabits.data.remote.firestore.JoinChallengeOutcome
+import com.saintnico.verdlyhabits.challenge.ChallengeInviteHelper
+import com.saintnico.verdlyhabits.challenge.ChallengeInviteManager
+import com.saintnico.verdlyhabits.ui.components.challenge.ChallengeInvitePreviewCard
 import com.saintnico.verdlyhabits.ui.components.share.shareChallengeInviteCard
 import com.saintnico.verdlyhabits.ui.theme.DangerRed
 import com.saintnico.verdlyhabits.ui.theme.GoldColor
@@ -125,7 +137,9 @@ fun ChallengeScreen(
     onNavigateToEditProfile: () -> Unit = {},
     onNavigateToMemberProfile: (String) -> Unit = {},
     settingsViewModel: SettingsViewModel = viewModel(),
-    friendsViewModel: FriendsViewModel = viewModel()
+    friendsViewModel: FriendsViewModel = viewModel(),
+    coinViewModel: CoinViewModel = viewModel(),
+    billingViewModel: BillingViewModel,
 ) {
     val connections by friendsViewModel.friendSummaries.collectAsState()
     val state by viewModel.state.collectAsState()
@@ -136,6 +150,7 @@ fun ChallengeScreen(
     var createdChallenge by remember { mutableStateOf<CreatedChallenge?>(null) }
     var createdChallengeShareInfo by remember { mutableStateOf<CreatedChallengeShareInfo?>(null) }
     var pendingCreateShareDraft by remember { mutableStateOf<Triple<String, String, Int>?>(null) }
+    var autoOpenAfterJoin by remember { mutableStateOf(false) }
 
     LaunchedEffect(pendingOpenChallengeId, state.isLoading, state.challenges, state.archivedChallenges) {
         val id = pendingOpenChallengeId ?: return@LaunchedEffect
@@ -149,6 +164,27 @@ fun ChallengeScreen(
     }
 
     val userUsername by settingsViewModel.userUsername.collectAsState()
+    val coinBalance by coinViewModel.balance.collectAsState()
+    val isPremium by billingViewModel.isPro.collectAsState()
+    val purchaseCelebration by coinViewModel.purchaseCelebration.collectAsState()
+    val coinNotice by coinViewModel.notice.collectAsState()
+    var showCoinPackSheet by remember { mutableStateOf(false) }
+    var giftTargetUid by remember { mutableStateOf<String?>(null) }
+    var showGiftArc by remember { mutableStateOf(false) }
+    var stakeConfirmAmount by remember { mutableStateOf<Int?>(null) }
+    var stakeConfirmChallengeId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(state.challenges, isPremium) {
+        coinViewModel.resolveStakes(state.challenges + state.archivedChallenges, isPremium)
+        coinViewModel.grantMonthlyDripIfDue(isPremium)
+    }
+
+    LaunchedEffect(coinNotice) {
+        coinNotice?.let { notice ->
+            onShowNotification?.invoke(notice.message, notice.isPositive)
+            coinViewModel.consumeNotice()
+        }
+    }
     var challengeTabPast by remember { mutableStateOf(false) }
     var fabExpanded by remember { mutableStateOf(false) }
     var proofViewer by remember { mutableStateOf<ProofViewerArgs?>(null) }
@@ -158,6 +194,14 @@ fun ChallengeScreen(
     val haptic = LocalHapticFeedback.current
     val hapticsEnabled by settingsViewModel.isVibrationEnabled.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val pending = ChallengeInviteManager.peekPendingJoin(context) ?: return@LaunchedEffect
+        ChallengeInviteManager.clearPendingJoin(context)
+        autoOpenAfterJoin = true
+        viewModel.joinChallenge(pending)
+    }
+
     val themePref = remember(context) { com.saintnico.verdlyhabits.preferences.ThemePreference(context) }
     val arenaOnboardingSeen by themePref.hasSeenChallengeArenaOnboarding.collectAsState(initial = false)
     var showArenaOnboarding by remember { mutableStateOf(false) }
@@ -315,7 +359,13 @@ fun ChallengeScreen(
             when (outcome) {
                 is JoinChallengeOutcome.Success -> {
                     pendingArenaOnboarding = true
-                    onShowNotification?.invoke("You're in! Find it under Active.", false)
+                    if (autoOpenAfterJoin) {
+                        viewModel.requestOpenChallengeDetail(outcome.challengeDocumentId)
+                        autoOpenAfterJoin = false
+                        onShowNotification?.invoke("Welcome to the challenge — you're in!", false)
+                    } else {
+                        onShowNotification?.invoke("You're in! Find it under Active.", false)
+                    }
                 }
                 JoinChallengeOutcome.NotFound ->
                     onShowNotification?.invoke(
@@ -367,15 +417,22 @@ fun ChallengeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
-                    val firstActive = state.challenges.firstOrNull { it.isActive && !it.isArchived }
+                    val firstActive = state.challenges.firstOrNull { it.isEffectivelyActive() }
                     val uid = viewModel.currentUserId
                     val rankLabel = if (firstActive != null && uid != null) {
                         val r = firstActive.rankOf(uid)
                         if (r > 0) "#$r" else "—"
                     } else "—"
-                    val activeN = state.challenges.count { it.isActive && !it.isArchived }
+                    val activeN = state.challenges.count { it.isEffectivelyActive() }
                     val streakV = if (firstActive != null && uid != null) firstActive.streakFor(uid) else 0
                     PremiumChallengesHeader(rankLabel, activeN, streakV, accent, tertiary)
+                    Spacer(Modifier.height(4.dp))
+                    CoinBalanceChip(
+                        balance = coinBalance,
+                        isPremium = isPremium,
+                        onClick = { showCoinPackSheet = true },
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
                 }
 
                 if (userUsername.isBlank() || userUsername == "UnknownRival" || userUsername.equals("unknownrival", ignoreCase = true)) {
@@ -417,8 +474,8 @@ fun ChallengeScreen(
                         }
                     }
                 } else {
-                    val active = state.challenges.filter { it.isActive && !it.isArchived }
-                    val ended = (state.challenges.filter { !it.isActive || it.isArchived } + state.archivedChallenges).distinctBy { it.id }
+                    val active = state.challenges.filter { it.isEffectivelyActive() }
+                    val ended = (state.challenges.filter { !it.isEffectivelyActive() } + state.archivedChallenges).distinctBy { it.id }
 
                     item {
                         Box(Modifier.padding(horizontal = 12.dp)) {
@@ -449,13 +506,16 @@ fun ChallengeScreen(
                             }
                         } else {
                             items(active, key = { it.id }) { challenge ->
+                                val coinStake by coinViewModel.observeStakeFor(challenge.id).collectAsState(initial = null)
                                 Box(Modifier.padding(horizontal = 12.dp)) {
                                     ChallengeCardPremium(
                                         challenge = challenge,
                                         currentUserId = viewModel.currentUserId ?: "",
                                         onClick = { selectedChallenge = challenge },
                                         isEnded = false,
-                                        todayStr = todayStr
+                                        todayStr = todayStr,
+                                        coinStakeAmount = coinStake?.stakedAmount,
+                                        isPremium = isPremium,
                                     )
                                 }
                             }
@@ -598,6 +658,10 @@ fun ChallengeScreen(
             challenge = selectedChallenge!!,
             currentUserId = viewModel.currentUserId ?: "",
             viewModel = viewModel,
+            coinViewModel = coinViewModel,
+            isPremium = isPremium,
+            coinBalance = coinBalance,
+            senderName = userUsername.ifBlank { "You" },
             hapticsEnabled = hapticsEnabled,
             connections = connections,
             onAddConnection = { friend ->
@@ -634,7 +698,87 @@ fun ChallengeScreen(
             },
             onViewProof = { proofViewer = it },
             onShowNotification = onShowNotification,
+            onBuyCoins = { showCoinPackSheet = true },
+            onRequestStakeConfirm = { challengeId, amount ->
+                stakeConfirmChallengeId = challengeId
+                stakeConfirmAmount = amount
+            },
+            onSupportMember = { uid -> giftTargetUid = uid },
         )
+    }
+
+    giftTargetUid?.let { receiverId ->
+        val ch = selectedChallenge
+        if (ch != null && receiverId != viewModel.currentUserId) {
+            GiftSupportSheet(
+                receiverName = ch.memberNames[receiverId] ?: "Rival",
+                balance = coinBalance,
+                isPremium = isPremium,
+                onDismiss = { giftTargetUid = null },
+                onSend = { amount, message ->
+                    coinViewModel.sendGift(
+                        challenge = ch,
+                        receiverId = receiverId,
+                        amount = amount,
+                        message = message,
+                        senderName = userUsername.ifBlank { "You" },
+                    ) { ok, msg ->
+                        onShowNotification?.invoke(msg, ok)
+                        if (ok) {
+                            showGiftArc = true
+                            giftTargetUid = null
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    stakeConfirmAmount?.let { amount ->
+        StakeConfirmSheet(
+            amount = amount,
+            onDismiss = {
+                stakeConfirmAmount = null
+                stakeConfirmChallengeId = null
+            },
+            onConfirm = {
+                val cid = stakeConfirmChallengeId
+                stakeConfirmAmount = null
+                stakeConfirmChallengeId = null
+                if (cid != null) {
+                    coinViewModel.stake(cid, amount) { ok, msg ->
+                        onShowNotification?.invoke(msg, ok)
+                    }
+                }
+            },
+        )
+    }
+
+    if (showCoinPackSheet) {
+        CoinPackSheet(
+            isOpen = true,
+            billingViewModel = billingViewModel,
+            isPremium = isPremium,
+            onDismiss = { showCoinPackSheet = false },
+            onPurchaseSuccess = { coinViewModel.celebratePurchase() },
+        )
+    }
+
+    if (purchaseCelebration || showGiftArc) {
+        Box(Modifier.fillMaxSize()) {
+            if (purchaseCelebration) {
+                CoinBurstAnimation(
+                    premium = isPremium,
+                    onFinished = { coinViewModel.endCelebration() },
+                )
+            }
+            if (showGiftArc) {
+                GiftArcAnimation(
+                    premium = isPremium,
+                    onFinished = { showGiftArc = false },
+                )
+            }
+        }
     }
 
     // ─── Creation Success Dialog ─────────────────────────────────────────────
@@ -655,27 +799,23 @@ fun ChallengeScreen(
             },
             text = {
                 Column {
-                    Text(
-                        "Your challenge is live. Friends open Verdly Habits → Challenges → Join, then paste either the long ID, the link, or the 6-letter invite code."
+                    ChallengeInvitePreviewCard(
+                        challengeName = shareInfo?.habitName ?: "Verdly challenge",
+                        inviteCode = cc.inviteCode,
+                        stake = shareInfo?.stake.orEmpty(),
+                        daysRemaining = shareInfo?.durationDays?.toLong(),
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
                     Text(
-                        "Invite code (6 letters)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = onBg.copy(alpha = 0.8f)
-                    )
-                    Text(
-                        cc.inviteCode,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = accent,
-                        letterSpacing = 4.sp
+                        "Share the card or link below. Friends tap it to join automatically in Verdly.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = onBg.copy(alpha = 0.85f),
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Challenge document ID",
+                        "Invite link",
                         style = MaterialTheme.typography.labelMedium,
-                        color = onBg.copy(alpha = 0.8f)
+                        color = onBg.copy(alpha = 0.8f),
                     )
                     Box(
                         modifier = Modifier
@@ -683,22 +823,38 @@ fun ChallengeScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                             .clickable {
+                                val link = ChallengeInviteHelper.shareLink(cc.inviteCode)
                                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Challenge ID", cc.documentId)
-                                clipboard.setPrimaryClip(clip)
-                                onShowNotification?.invoke("Document ID copied!", false)
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Challenge invite link", link))
+                                onShowNotification?.invoke("Invite link copied!", false)
                             }
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(14.dp),
                     ) {
                         Text(
-                            cc.documentId,
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.titleMedium,
+                            ChallengeInviteHelper.shareLinkLabel(cc.inviteCode),
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 2.sp
                         )
                     }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "6-letter code",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = onBg.copy(alpha = 0.8f),
+                    )
+                    Text(
+                        cc.inviteCode,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = accent,
+                        letterSpacing = 4.sp,
+                        modifier = Modifier.clickable {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Challenge invite code", cc.inviteCode))
+                            onShowNotification?.invoke("Invite code copied!", false)
+                        },
+                    )
                 }
             },
             confirmButton = {
@@ -1197,6 +1353,10 @@ private fun ChallengeDetailSheet(
     challenge: Challenge,
     currentUserId: String,
     viewModel: ChallengeViewModel,
+    coinViewModel: CoinViewModel,
+    isPremium: Boolean,
+    coinBalance: Int,
+    senderName: String,
     hapticsEnabled: Boolean,
     connections: List<FriendSummary>,
     onAddConnection: (FriendSummary) -> Unit,
@@ -1208,9 +1368,14 @@ private fun ChallengeDetailSheet(
     onEnd: () -> Unit,
     onViewProof: (ProofViewerArgs) -> Unit,
     onShowNotification: ((String, Boolean) -> Unit)? = null,
+    onBuyCoins: () -> Unit = {},
+    onRequestStakeConfirm: (challengeId: String, amount: Int) -> Unit = { _, _ -> },
+    onSupportMember: (String) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val activityItems by viewModel.observeActivity(challenge.id).collectAsState(initial = emptyList())
+    val activeStake by coinViewModel.observeStakeFor(challenge.id).collectAsState(initial = null)
+    val gifts by coinViewModel.observeGiftsFor(challenge.id).collectAsState(initial = emptyList())
     var showConnectionsPicker by remember { mutableStateOf(false) }
     var nudgeTarget by remember { mutableStateOf<com.saintnico.verdlyhabits.ui.components.social.NudgeTarget?>(null) }
     val sheetHaptic = LocalHapticFeedback.current
@@ -1238,6 +1403,10 @@ private fun ChallengeDetailSheet(
     val missedYesterday = !challenge.hasCompletedToday(currentUserId, yesterdayStr)
     val inGraceWindow = hourNow < 3
 
+    LaunchedEffect(challenge.id) {
+        coinViewModel.refreshGiftsFor(challenge.id)
+    }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -1257,10 +1426,24 @@ private fun ChallengeDetailSheet(
                 .verticalScroll(rememberScrollState())
         ) {
             // Title
-            Text(challenge.habitName,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    challenge.habitName,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                )
+                CoinBalanceChip(
+                    balance = coinBalance,
+                    isPremium = isPremium,
+                    onClick = onBuyCoins,
+                )
+            }
             
             val creatorName = challenge.memberNames[challenge.creatorId] ?: "UnknownRival"
             Text("Started by @$creatorName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -1334,6 +1517,19 @@ private fun ChallengeDetailSheet(
                     Text(challenge.stake, fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground)
                 }
+            }
+
+            if (challenge.isActive && currentUserId.isNotBlank()) {
+                Spacer(Modifier.height(14.dp))
+                StakeConsistencyCard(
+                    balance = coinBalance,
+                    activeStake = activeStake,
+                    streak = challenge.streakFor(currentUserId),
+                    isPremium = isPremium,
+                    challengeActive = challenge.isActive,
+                    onCommitClick = { amount -> onRequestStakeConfirm(challenge.id, amount) },
+                    onBuyCoins = onBuyCoins,
+                )
             }
 
             if (challenge.isActive) {
@@ -1472,6 +1668,7 @@ private fun ChallengeDetailSheet(
                 challenge,
                 currentUserId,
                 todayStr,
+                gifts,
                 onReact,
                 onNavigateToMemberProfile,
                 onViewProof,
@@ -1490,6 +1687,9 @@ private fun ChallengeDetailSheet(
                         },
                         contextId = challenge.id,
                     )
+                },
+                onSupportClick = { uid ->
+                    if (uid != currentUserId) onSupportMember(uid)
                 },
             )
 
@@ -1818,10 +2018,12 @@ private fun LeaderboardList(
     challenge: Challenge,
     currentUserId: String,
     todayStr: String,
+    gifts: List<com.saintnico.verdlyhabits.data.local.coins.GiftEventEntity>,
     onReact: (String, String) -> Unit,
     onNavigateToMemberProfile: (String) -> Unit,
     onViewProof: (ProofViewerArgs) -> Unit,
     onNudgeClick: ((String) -> Unit)? = null,
+    onSupportClick: ((String) -> Unit)? = null,
 ) {
     val viewProofFor: (String, String) -> Unit = { userId, url ->
         val displayName = challenge.memberNames[userId] ?: "Unknown"
@@ -1842,6 +2044,27 @@ private fun LeaderboardList(
     }
 
     Spacer(Modifier.height(20.dp))
+    var standingsTab by remember { mutableIntStateOf(0) }
+    val supportedBoard = remember(gifts, challenge.members) {
+        challenge.members
+            .map { uid -> uid to gifts.filter { it.receiverId == uid }.sumOf { it.amount } }
+            .sortedByDescending { it.second }
+    }
+    val displayBoard = if (standingsTab == 0) leaderboard else supportedBoard
+
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        SegmentedButton(
+            selected = standingsTab == 0,
+            onClick = { standingsTab = 0 },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+        ) { Text("Most Consistent", fontSize = 12.sp) }
+        SegmentedButton(
+            selected = standingsTab == 1,
+            onClick = { standingsTab = 1 },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+        ) { Text("Most Supported", fontSize = 12.sp) }
+    }
+    Spacer(Modifier.height(12.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             Icons.Filled.WorkspacePremium,
@@ -1859,7 +2082,7 @@ private fun LeaderboardList(
         )
         Spacer(Modifier.weight(1f))
         Text(
-            "${leaderboard.size} rivals",
+            "${displayBoard.size} rivals",
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
@@ -1867,10 +2090,10 @@ private fun LeaderboardList(
     }
     Spacer(Modifier.height(12.dp))
 
-    val podium = leaderboard.take(3)
-    val rest = leaderboard.drop(3)
+    val podium = displayBoard.take(3)
+    val rest = displayBoard.drop(3)
 
-    key(challenge.id, podium.map { it.first }) {
+    key(challenge.id, standingsTab, podium.map { it.first }) {
         ChallengePodium(
             entries = podium,
             challenge = challenge,
@@ -1895,6 +2118,8 @@ private fun LeaderboardList(
                     onProfileClick = onNavigateToMemberProfile,
                     onProofClick = viewProofFor,
                     onNudgeClick = onNudgeClick,
+                    onSupportClick = onSupportClick,
+                    scoreSuffix = if (standingsTab == 1) "coins received" else null,
                 )
             }
         }

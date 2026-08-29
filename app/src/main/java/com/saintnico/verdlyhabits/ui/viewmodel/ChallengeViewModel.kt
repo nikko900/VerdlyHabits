@@ -58,6 +58,7 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
     private val repository = ChallengeRepository()
     private val _state = MutableStateFlow(ChallengeUiState())
     private var hasCheckedMisses = false
+    private val finalizedExpiredIds = mutableSetOf<String>()
 
     /** Per-challenge last observed rank for the current user — powers live overtake/lead banners. */
     private val lastKnownRank = mutableMapOf<String, Int>()
@@ -196,7 +197,7 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 if (!hasCheckedMisses && activeSorted.isNotEmpty()) {
                     hasCheckedMisses = true
-                    activeSorted.filter { it.isActive }.forEach { ch ->
+                    activeSorted.filter { it.isEffectivelyActive() }.forEach { ch ->
                         launch {
                             try {
                                 repository.checkMissedDays(ch.id)
@@ -205,8 +206,23 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }
                 }
-                // Expired challenges are finalised only when the user opens that challenge
-                // (see ChallengeDetailSheet) — not on every list refresh.
+                activeSorted
+                    .filter { it.isActive && !it.isArchived && it.isPastEndDate() }
+                    .filter { it.id !in finalizedExpiredIds }
+                    .forEach { ch ->
+                        finalizedExpiredIds.add(ch.id)
+                        launch {
+                            try {
+                                repository.finaliseChallenge(
+                                    ch.id,
+                                    endedByUid = uid,
+                                    archivedReason = "completed",
+                                )
+                            } catch (_: Exception) {
+                                finalizedExpiredIds.remove(ch.id)
+                            }
+                        }
+                    }
             }
         }
     }

@@ -362,6 +362,8 @@ fun PremiumStandingRow(
     onProfileClick: (String) -> Unit,
     onProofClick: (userId: String, photoUrl: String) -> Unit,
     onNudgeClick: ((String) -> Unit)? = null,
+    onSupportClick: ((String) -> Unit)? = null,
+    scoreSuffix: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val name = challenge.memberNames[userId] ?: "Unknown"
@@ -490,6 +492,14 @@ fun PremiumStandingRow(
             }
         }
 
+        if (!isMe && onSupportClick != null) {
+            com.saintnico.verdlyhabits.ui.components.coins.SupportIconButton(
+                onClick = { onSupportClick(userId) },
+                contentDescription = "Support $name",
+                modifier = Modifier.size(28.dp),
+            )
+        }
+
         if (rankChange != 0) {
             Icon(
                 if (rankChange > 0) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
@@ -506,7 +516,7 @@ fun PremiumStandingRow(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                challenge.scoreLabel().uppercase(),
+                (scoreSuffix ?: challenge.scoreLabel()).uppercase(),
                 fontSize = 8.sp,
                 letterSpacing = 0.8.sp,
                 fontWeight = FontWeight.Bold,
