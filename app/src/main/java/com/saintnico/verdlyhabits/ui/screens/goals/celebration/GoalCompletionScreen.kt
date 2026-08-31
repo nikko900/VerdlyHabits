@@ -80,7 +80,10 @@ fun GoalCompletionScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         Text(
-            "Goal Completed",
+            if (goal.goalType == com.saintnico.verdlyhabits.data.local.goals.GoalType.REACH)
+                "You reached it"
+            else
+                "Goal Completed",
             fontFamily = dmSansFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
