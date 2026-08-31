@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,8 +35,6 @@ import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.saintnico.verdlyhabits.domain.HabitCategory
@@ -78,7 +78,47 @@ private fun scoreColor(rate: Float): Color = when {
     else -> Coral
 }
 
-/** Today hero — colorful ring + big % + metric tiles (v1) with refined layout (v2). */
+@Composable
+private fun isLight() = !isSystemInDarkTheme()
+
+@Composable
+private fun onMuted(alphaLight: Float = 0.58f, alphaDark: Float = 0.55f): Color =
+    MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) alphaLight else alphaDark)
+
+/** Soft panel — border + wash only. No elevation, no Material Card. */
+@Composable
+private fun SoftPanel(
+    modifier: Modifier = Modifier,
+    accent: Color,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    val light = isLight()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        accent.copy(alpha = if (light) 0.12f else 0.14f),
+                        Purple.copy(alpha = if (light) 0.05f else 0.07f),
+                        MaterialTheme.colorScheme.surface,
+                    ),
+                ),
+            )
+            .border(
+                1.dp,
+                accent.copy(alpha = if (light) 0.18f else 0.20f),
+                RoundedCornerShape(24.dp),
+            )
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(20.dp),
+        content = { content() },
+    )
+}
+
+/** Today hero — colorful ring + big % + metric tiles. */
 @Composable
 fun HomeTodayHeroCard(
     completionRate: Float,
@@ -94,147 +134,114 @@ fun HomeTodayHeroCard(
     val accent = scoreColor(completionRate)
     val consistencyColor = scoreColor(consistencyScore / 100f)
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(0.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            accent.copy(alpha = 0.16f),
-                            Purple.copy(alpha = 0.08f),
-                            MaterialTheme.colorScheme.surface,
-                        ),
-                    ),
-                )
-                .border(1.dp, accent.copy(alpha = 0.20f), RoundedCornerShape(24.dp))
-                .padding(20.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Today",
-                            fontFamily = frauncesFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            CountUpText(
-                                targetValue = (completionRate * 100).toInt(),
-                                suffix = "%",
-                                fontSize = 44.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = accent,
-                            )
-                        }
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "$completedCount of $totalCount habits done",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.62f),
-                        )
-                    }
-                    HomeProgressRing(
-                        progress = completionRate,
-                        accent = accent,
-                        size = 92.dp,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    HeroMiniMetric(
-                        modifier = Modifier.weight(1f),
-                        icon = { StreakFlame(streak = totalStreak.coerceAtLeast(1), size = 18.dp) },
-                        value = "$totalStreak",
-                        label = "Streak",
-                        color = Coral,
-                    )
-                    HeroMiniMetric(
-                        modifier = Modifier.weight(1f),
-                        icon = {
-                            Icon(Icons.Rounded.LocalFireDepartment, null, tint = consistencyColor, modifier = Modifier.size(16.dp))
-                        },
-                        value = "$consistencyScore",
-                        label = "Consistency",
-                        color = consistencyColor,
-                    )
-                    HeroMiniMetric(
-                        modifier = Modifier.weight(1f),
-                        icon = {
-                            Icon(
-                                if (weekTrendUp) Icons.AutoMirrored.Rounded.TrendingUp
-                                else Icons.AutoMirrored.Rounded.TrendingDown,
-                                null,
-                                tint = if (weekTrendUp) Mint else Coral,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        },
-                        value = "${if (weekTrendUp) "+" else ""}$weekDeltaPct%",
-                        label = "This week",
-                        color = if (weekTrendUp) Mint else Coral,
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.04f))
-                        .clickable(onClick = onTap)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.QueryStats, null, tint = Purple.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
+    SoftPanel(modifier = modifier, accent = accent, onClick = onTap) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Open full dashboard",
+                        "Today",
+                        fontFamily = frauncesFamily,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
-                        modifier = Modifier.weight(1f),
+                        fontSize = 14.sp,
+                        color = onMuted(0.62f, 0.55f),
                     )
-                    Icon(
-                        Icons.Rounded.ChevronRight,
-                        null,
-                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.38f),
-                        modifier = Modifier.size(18.dp),
+                    Spacer(Modifier.height(4.dp))
+                    CountUpText(
+                        targetValue = (completionRate * 100).toInt(),
+                        suffix = "%",
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "$completedCount of $totalCount habits done",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = onMuted(0.68f, 0.62f),
                     )
                 }
+                HomeProgressRing(progress = completionRate, accent = accent, size = 92.dp)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HeroMiniMetric(
+                    modifier = Modifier.weight(1f),
+                    icon = { StreakFlame(streak = totalStreak.coerceAtLeast(1), size = 18.dp) },
+                    value = "$totalStreak",
+                    label = "Streak",
+                    color = Coral,
+                )
+                HeroMiniMetric(
+                    modifier = Modifier.weight(1f),
+                    icon = {
+                        Icon(Icons.Rounded.LocalFireDepartment, null, tint = consistencyColor, modifier = Modifier.size(16.dp))
+                    },
+                    value = "$consistencyScore",
+                    label = "Consistency",
+                    color = consistencyColor,
+                )
+                HeroMiniMetric(
+                    modifier = Modifier.weight(1f),
+                    icon = {
+                        Icon(
+                            if (weekTrendUp) Icons.AutoMirrored.Rounded.TrendingUp
+                            else Icons.AutoMirrored.Rounded.TrendingDown,
+                            null,
+                            tint = if (weekTrendUp) Mint else Coral,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                    value = "${if (weekTrendUp) "+" else ""}$weekDeltaPct%",
+                    label = "This week",
+                    color = if (weekTrendUp) Mint else Coral,
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) 0.05f else 0.04f))
+                    .clickable(onClick = onTap)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.QueryStats, null, tint = Purple.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Open full dashboard",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    color = onMuted(0.78f, 0.78f),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    null,
+                    tint = onMuted(0.40f, 0.38f),
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun HomeProgressRing(
-    progress: Float,
-    accent: Color,
-    size: androidx.compose.ui.unit.Dp,
-) {
+private fun HomeProgressRing(progress: Float, accent: Color, size: Dp) {
     val animated by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(1100, easing = FastOutSlowInEasing),
         label = "home_ring",
     )
-    val track = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f)
+    val track = MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) 0.12f else 0.08f)
 
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
         Canvas(Modifier.size(size)) {
@@ -276,7 +283,7 @@ private fun HomeProgressRing(
             Text(
                 "today",
                 fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                color = onMuted(0.50f, 0.45f),
             )
         }
     }
@@ -293,8 +300,11 @@ private fun HeroMiniMetric(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.45f))
-            .border(1.dp, color.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+            .background(
+                if (isLight()) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                else MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+            )
+            .border(1.dp, color.copy(alpha = if (isLight()) 0.18f else 0.14f), RoundedCornerShape(14.dp))
             .padding(horizontal = 10.dp, vertical = 11.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
@@ -317,7 +327,7 @@ private fun HeroMiniMetric(
             label,
             fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.48f),
+            color = onMuted(0.55f, 0.48f),
         )
     }
 }
@@ -329,32 +339,48 @@ fun HomeWeekPulseStrip(
     onTap: (() -> Unit)? = null,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    val completedDays = dailyPulse.count { it.rate >= 1f }
+    val avgRate = if (dailyPulse.isEmpty()) 0f else dailyPulse.map { it.rate }.average().toFloat()
+    val light = isLight()
 
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp),
+            .clip(RoundedCornerShape(22.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onBackground.copy(alpha = if (light) 0.08f else 0.10f),
+                RoundedCornerShape(22.dp),
+            )
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .padding(18.dp),
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Your week",
+                        fontFamily = frauncesFamily,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        "$completedDays perfect · ${(avgRate * 100).toInt()}% average",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = onMuted(0.62f, 0.52f),
+                    )
+                }
                 Text(
-                    "Your week",
-                    fontFamily = frauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "Tap for stats",
+                    "Stats →",
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                    fontWeight = FontWeight.Bold,
+                    color = accent.copy(alpha = 0.85f),
                 )
             }
             Spacer(Modifier.height(14.dp))
@@ -363,39 +389,7 @@ fun HomeWeekPulseStrip(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 dailyPulse.forEach { day ->
-                    val ringColor = when {
-                        day.rate >= 1f -> accent
-                        day.rate >= 0.5f -> accent.copy(alpha = 0.75f)
-                        day.rate > 0f -> Gold
-                        else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            day.label,
-                            fontSize = 11.sp,
-                            fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Medium,
-                            color = if (day.isToday) accent
-                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.48f),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(if (day.isToday) 40.dp else 34.dp)
-                                .then(
-                                    if (day.isToday) Modifier.border(2.dp, accent, CircleShape) else Modifier,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            PulseRing(
-                                rate = day.rate,
-                                color = ringColor,
-                                size = if (day.isToday) 34.dp else 28.dp,
-                            )
-                            if (day.rate >= 1f) {
-                                Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(11.dp))
-                            }
-                        }
-                    }
+                    WeekDayRing(day = day, accent = accent)
                 }
             }
         }
@@ -403,14 +397,69 @@ fun HomeWeekPulseStrip(
 }
 
 @Composable
-private fun PulseRing(rate: Float, color: Color, size: androidx.compose.ui.unit.Dp) {
+private fun WeekDayRing(day: StatsEngine.DayPulse, accent: Color) {
+    val ringColor = when {
+        day.rate >= 1f -> accent
+        day.rate >= 0.5f -> Mint
+        day.rate > 0f -> Gold
+        else -> MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) 0.28f else 0.18f)
+    }
+    val outer = if (day.isToday) 42.dp else 36.dp
+    val inner = if (day.isToday) 34.dp else 30.dp
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            day.label,
+            fontSize = 11.sp,
+            fontWeight = if (day.isToday) FontWeight.Bold else FontWeight.Medium,
+            color = when {
+                day.isToday -> accent
+                day.rate >= 1f -> accent.copy(alpha = 0.88f)
+                else -> onMuted(0.62f, 0.48f)
+            },
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .size(outer)
+                .then(
+                    if (day.isToday) {
+                        Modifier
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = if (isLight()) 0.08f else 0.10f))
+                            .border(2.dp, accent, CircleShape)
+                    } else Modifier,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            PulseRing(rate = day.rate, color = ringColor, size = inner)
+            if (day.rate >= 1f) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(accent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PulseRing(rate: Float, color: Color, size: Dp) {
     val animated by animateFloatAsState(rate.coerceIn(0f, 1f), spring(), label = "pulse")
+    val trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) 0.18f else 0.10f)
+    val strokeWidth = if (isLight()) 4.dp else 3.5.dp
+
     Canvas(Modifier.size(size)) {
-        val stroke = 3.5.dp.toPx()
+        val stroke = strokeWidth.toPx()
         val pad = stroke / 2f
         val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
         drawArc(
-            color = Color.White.copy(alpha = 0.06f),
+            color = trackColor,
             startAngle = -90f,
             sweepAngle = 360f,
             useCenter = false,
@@ -441,105 +490,97 @@ fun HomeTodayFocusCard(
     modifier: Modifier = Modifier,
 ) {
     val habitColor = habit.color.toHabitColor()
+    val light = isLight()
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(0.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            habitColor.copy(alpha = 0.14f),
-                            Gold.copy(alpha = 0.06f),
-                            MaterialTheme.colorScheme.surface,
-                        ),
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        habitColor.copy(alpha = if (light) 0.12f else 0.14f),
+                        Gold.copy(alpha = if (light) 0.05f else 0.06f),
+                        MaterialTheme.colorScheme.surface,
                     ),
+                ),
+            )
+            .border(
+                1.dp,
+                habitColor.copy(alpha = if (light) 0.22f else 0.28f),
+                RoundedCornerShape(22.dp),
+            )
+            .padding(18.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.AutoAwesome, null, tint = Gold, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Today's focus",
+                    fontFamily = frauncesFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = habitColor,
                 )
-                .border(
-                    1.dp,
-                    Brush.linearGradient(listOf(habitColor.copy(0.30f), Gold.copy(0.20f))),
-                    RoundedCornerShape(22.dp),
-                )
-                .padding(18.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Gold, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(habitColor.copy(0.20f), habitColor.copy(0.06f)),
+                            ),
+                        )
+                        .border(1.dp, habitColor.copy(0.18f), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AnimatedHabitIcon(icon = habit.icon, color = habitColor, size = 26.dp)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Today's focus",
+                        habit.title,
                         fontFamily = frauncesFamily,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        color = habitColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 17.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(habitColor.copy(0.20f), habitColor.copy(0.06f)),
-                                ),
-                            )
-                            .border(1.dp, habitColor.copy(0.18f), RoundedCornerShape(16.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        AnimatedHabitIcon(
-                            icon = habit.icon,
-                            color = habitColor,
-                            size = 26.dp,
-                        )
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StreakFlame(streak = habit.streak.coerceAtLeast(1), size = 14.dp)
+                        Spacer(Modifier.width(4.dp))
                         Text(
-                            habit.title,
-                            fontFamily = frauncesFamily,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 17.sp,
+                            "${habit.streak}-day streak · ${habit.difficulty.displayName}",
+                            fontSize = 12.sp,
+                            color = onMuted(0.62f, 0.58f),
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            StreakFlame(streak = habit.streak.coerceAtLeast(1), size = 14.dp)
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "${habit.streak}-day streak · ${habit.difficulty.displayName}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.58f),
-                            )
-                        }
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onTapComplete,
-                        modifier = Modifier.weight(1f).height(46.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = habitColor),
-                    ) {
-                        Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Complete", fontWeight = FontWeight.Bold)
-                    }
-                    OutlinedButton(
-                        onClick = onTapFocus,
-                        modifier = Modifier.weight(1f).height(46.dp),
-                        shape = RoundedCornerShape(14.dp),
-                    ) {
-                        Icon(Icons.Rounded.Timer, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Focus", fontWeight = FontWeight.SemiBold)
-                    }
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Rounded.MoreHoriz, null, tint = MaterialTheme.colorScheme.onBackground.copy(0.55f))
-                    }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onTapComplete,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = habitColor),
+                ) {
+                    Icon(Icons.Rounded.Check, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Complete", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onTapFocus,
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Rounded.Timer, null, modifier = Modifier.size(18.dp), tint = habitColor)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Focus", fontWeight = FontWeight.SemiBold, color = habitColor)
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Rounded.MoreHoriz, null, tint = onMuted(0.58f, 0.55f))
                 }
             }
         }
@@ -572,7 +613,7 @@ fun HomeSectionHeader(
                 .clip(RoundedCornerShape(50))
                 .background(
                     if (highlight) Mint.copy(alpha = 0.14f)
-                    else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f),
+                    else MaterialTheme.colorScheme.onBackground.copy(alpha = if (isLight()) 0.07f else 0.06f),
                 )
                 .padding(horizontal = 10.dp, vertical = 4.dp),
         ) {
@@ -580,7 +621,7 @@ fun HomeSectionHeader(
                 badge,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (highlight) Mint else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.52f),
+                color = if (highlight) Mint else onMuted(0.55f, 0.52f),
             )
         }
     }
@@ -604,9 +645,9 @@ fun HomeCategoryFilterRow(
                 color = if (isOn) cat.color.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
-                    if (isOn) cat.color.copy(0.45f) else MaterialTheme.colorScheme.onBackground.copy(0.08f),
+                    if (isOn) cat.color.copy(0.45f) else MaterialTheme.colorScheme.onBackground.copy(if (isLight()) 0.10f else 0.08f),
                 ),
-                shadowElevation = if (isOn) 2.dp else 0.dp,
+                shadowElevation = 0.dp,
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp),
@@ -623,7 +664,7 @@ fun HomeCategoryFilterRow(
                         cat.displayName,
                         fontSize = 12.sp,
                         fontWeight = if (isOn) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isOn) cat.color else MaterialTheme.colorScheme.onBackground.copy(0.65f),
+                        color = if (isOn) cat.color else onMuted(0.70f, 0.65f),
                     )
                 }
             }

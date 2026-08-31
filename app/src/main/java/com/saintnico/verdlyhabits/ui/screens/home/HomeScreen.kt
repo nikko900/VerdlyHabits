@@ -145,6 +145,9 @@ fun HomeScreen(
     val todayIso = java.time.LocalDate.now().toString()
     val showTrialPill = billingViewModel.isInFreeTrial() && !isPro && dismissedPillDay != todayIso
     var showWrapped by remember { mutableStateOf(false) }
+    val wrappedWeekKey = remember { com.saintnico.verdlyhabits.util.WeeklyWrappedWeek.currentKey() }
+    val lastHomeWrappedWeek by themePref.lastHomeWrappedWeek.collectAsState(initial = null)
+    val showWrappedBanner = lastHomeWrappedWeek != wrappedWeekKey
 
     // ── Source of truth ────────────────────────────────────────────────────
     val habits = viewModel.habits
@@ -172,7 +175,10 @@ fun HomeScreen(
 
     val statsState = userStatsViewModel?.state?.collectAsState()
     val xpToday = statsState?.value?.xpEarnedToday ?: 0
-    val shieldCount = statsState?.value?.streakShields ?: 0
+    val streakSnap by remember {
+        com.saintnico.verdlyhabits.data.streak.StreakRepository.get(context)
+    }.snapshot.collectAsState()
+    val shieldCount = streakSnap.shields.available
     val dashboardMetrics = remember(habits, statsState?.value) {
         StatsEngine.computeDashboard(
             habits = habits,
@@ -216,6 +222,7 @@ fun HomeScreen(
     // ── Local UI state ─────────────────────────────────────────────────────
     var selectedHabitForActions by remember { mutableStateOf<HabitItem?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleteReason by remember { mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var insightDismissed by remember { mutableStateOf(false) }
 
@@ -446,7 +453,12 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (showWrapped) {
-            com.saintnico.verdlyhabits.ui.screens.stats.WrappedStoryScreen(onClose = { showWrapped = false })
+            com.saintnico.verdlyhabits.ui.screens.stats.WrappedStoryScreen(
+                onClose = {
+                    showWrapped = false
+                    scope.launch { themePref.markHomeWrappedSeenForWeek(wrappedWeekKey) }
+                },
+            )
         } else {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
@@ -466,23 +478,28 @@ fun HomeScreen(
                     .padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // ── Weekly Wrapped Banner ─────────────
-                item {
-                    androidx.compose.material3.Card(
-                        onClick = { showWrapped = true },
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF1B4332))
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(20.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                // ── Weekly Wrapped (once per new week; always on Account) ────
+                if (showWrappedBanner) {
+                    item {
+                        androidx.compose.material3.Card(
+                            onClick = {
+                                scope.launch { themePref.markHomeWrappedSeenForWeek(wrappedWeekKey) }
+                                showWrapped = true
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xFF1B4332))
                         ) {
-                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color(0xFF52B788), modifier = Modifier.size(32.dp))
-                            Spacer(Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("WEEKLY WRAPPED", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, color = Color(0xFF52B788))
-                                Text("Your habit story is ready", fontFamily = frauncesFamily, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Color.White)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Color(0xFF52B788), modifier = Modifier.size(32.dp))
+                                Spacer(Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("WEEKLY WRAPPED", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp, color = Color(0xFF52B788))
+                                    Text("Your habit story is ready", fontFamily = frauncesFamily, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Color.White)
+                                }
                             }
                         }
                     }
@@ -623,12 +640,12 @@ fun HomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     "$timeGreeting, $displayName.",
-                                    fontFamily = com.saintnico.verdlyhabits.ui.theme.frauncesFamily,
+                                    fontFamily = frauncesFamily,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 26.sp,
                                     lineHeight = 32.sp,
@@ -748,7 +765,7 @@ fun HomeScreen(
                         )
                     }
                     items(activeFiltered, key = { it.id }) { habit ->
-                        val isAtRisk = now.hour >= 21 && habit.streak > 7
+                        val isAtRisk = streakSnap.results[habit.id]?.isAtRisk == true
                         HabitSwipeCard(
                             habit = habit,
                             isAtRisk = isAtRisk,
@@ -892,20 +909,50 @@ fun HomeScreen(
     }
 
     if (showDeleteConfirm && selectedHabitForActions != null) {
+        val habitTitle = selectedHabitForActions!!.title
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false; selectedHabitForActions = null },
+            onDismissRequest = {
+                showDeleteConfirm = false
+                deleteReason = ""
+                selectedHabitForActions = null
+            },
             title = { Text(stringResource(R.string.delete_confirm_title)) },
-            text = { Text(stringResource(R.string.delete_confirm_body, selectedHabitForActions!!.title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.delete_confirm_body, habitTitle))
+                    Text(
+                        "What's making you let this one go?",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    OutlinedTextField(
+                        value = deleteReason,
+                        onValueChange = { deleteReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("A short note for yourself") },
+                        minLines = 2,
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteHabit(selectedHabitForActions!!.id)
-                    showDeleteConfirm = false; selectedHabitForActions = null
-                }) {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteHabit(selectedHabitForActions!!.id)
+                        showDeleteConfirm = false
+                        deleteReason = ""
+                        selectedHabitForActions = null
+                    },
+                    enabled = deleteReason.trim().length >= 3,
+                ) {
                     Text(stringResource(R.string.delete_confirm_button), color = Color(0xFFEF5350))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false; selectedHabitForActions = null }) {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    deleteReason = ""
+                    selectedHabitForActions = null
+                }) {
                     Text(stringResource(R.string.cancel))
                 }
             }

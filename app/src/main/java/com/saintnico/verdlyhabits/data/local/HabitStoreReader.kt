@@ -34,12 +34,16 @@ object HabitStoreReader {
                     title = e.title,
                     icon = HabitIconRegistry.iconFor(e.iconName),
                     color = if (e.color != 0L) e.color else 0xFF52B788L,
-                    streak = e.completedDates.size.coerceAtLeast(0),
+                    // Streak is owned by StreakRepository/StreakEngine. This reader has no
+                    // schedule context or clock, and the previous `completedDates.size` here
+                    // reported lifetime completions rather than a consecutive run.
+                    streak = 0,
                     isCompleted = e.isCompleted,
                     reminderEnabled = e.reminderEnabled,
                     reminderTime = e.reminderTime,
                     reminderTime2 = e.reminderTime2,
                     completedDates = e.completedDates,
+                    completionProofs = e.completionProofs ?: emptyMap(),
                     isPaused = e.isPaused,
                     isArchived = e.isArchived,
                     frequency = HabitFrequency.fromStored(e.frequency),
@@ -47,6 +51,8 @@ object HabitStoreReader {
                     category = HabitCategory.fromName(e.category),
                     difficulty = Difficulty.fromName(e.difficulty),
                     reminderWindow = ReminderWindow.fromName(e.reminderWindow),
+                    completionWindowStart = e.completionWindowStart,
+                    completionWindowEnd = e.completionWindowEnd,
                 )
             }
         } catch (_: Exception) {

@@ -171,7 +171,7 @@ private fun HabitWidgetRowView(habit: HabitWidgetRow) {
         }
         Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
             Text(
-                text = "🔥${habit.streak}",
+                text = "${habit.streak}d",
                 style = TextStyle(
                     color = VerdlyWidgetTheme.color(VerdlyWidgetTheme.Gold),
                     fontSize = 12.sp,

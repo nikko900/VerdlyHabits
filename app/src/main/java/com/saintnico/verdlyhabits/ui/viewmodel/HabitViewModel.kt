@@ -8,20 +8,24 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.saintnico.verdlyhabits.data.streak.StreakRepository
+import com.saintnico.verdlyhabits.data.engagement.EngagementKind
+import com.saintnico.verdlyhabits.data.engagement.SessionEngagementTracker
+import com.saintnico.verdlyhabits.domain.Difficulty
+import com.saintnico.verdlyhabits.domain.HabitCategory
+import com.saintnico.verdlyhabits.domain.HabitFrequency
+import com.saintnico.verdlyhabits.domain.ReminderWindow
+import com.saintnico.verdlyhabits.domain.streak.CompletionSource
 import com.saintnico.verdlyhabits.notifications.ReminderScheduler
 import com.saintnico.verdlyhabits.preferences.dataStore
+import com.saintnico.verdlyhabits.streak.DayChangeCoordinator
+import com.saintnico.verdlyhabits.streak.StreakNotifier
 import com.saintnico.verdlyhabits.ui.models.HabitIconRegistry
 import com.saintnico.verdlyhabits.ui.screens.home.HabitItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-
-import com.saintnico.verdlyhabits.domain.Difficulty
-import com.saintnico.verdlyhabits.domain.HabitCategory
-import com.saintnico.verdlyhabits.domain.HabitFrequency
-import com.saintnico.verdlyhabits.domain.ReminderWindow
-import com.saintnico.verdlyhabits.ui.utils.calculateStreak
 
 data class HabitEntity(
     val id: String,
@@ -38,7 +42,6 @@ data class HabitEntity(
     val isPaused: Boolean = false,
     val isArchived: Boolean = false,
     val completionProofs: Map<String, String> = emptyMap(),
-    // Phase 1 overhaul fields — nullable in persistence so old saves still deserialize.
     val difficulty: String? = null,
     val category: String? = null,
     val reminderWindow: String? = null,
@@ -56,10 +59,37 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val HABITS_KEY = stringPreferencesKey("habits_list")
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
     private val userRepository = com.saintnico.verdlyhabits.data.remote.firestore.UserRepository()
+    private val streakRepo = StreakRepository.get(application)
 
     init {
         viewModelScope.launch {
+            runCatching { streakRepo.migrateLegacyIfNeeded() }
             loadHabits()
+            runCatching { DayChangeCoordinator.start(getApplication()) }
+            runCatching { StreakNotifier.rescheduleAll(getApplication()) }
+        }
+        viewModelScope.launch {
+            streakRepo.snapshot.collect { snap ->
+                runCatching {
+                    applyStreakSnapshot(snap.results.mapValues { it.value.currentStreak to it.value.isCompleteToday })
+                }
+            }
+        }
+    }
+
+    /**
+     * Overlays engine-owned streak/completion onto the in-memory habit list. Habit
+     * definitions stay in DataStore; streak maths never do.
+     */
+    private fun applyStreakSnapshot(byId: Map<String, Pair<Int, Boolean>>) {
+        if (habits.isEmpty() || byId.isEmpty()) return
+        for (i in habits.indices) {
+            val item = habits[i]
+            val overlay = byId[item.id] ?: continue
+            val (streak, completeToday) = overlay
+            if (item.streak != streak || item.isCompleted != completeToday) {
+                habits[i] = item.copy(streak = streak, isCompleted = completeToday)
+            }
         }
     }
 
@@ -72,6 +102,9 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                 restoreFromFirestore()
             }
         }
+        streakRepo.invalidateSchedules()
+        streakRepo.refreshDay()
+        streakRepo.reconcile()
         refreshHomeScreenWidgets()
     }
 
@@ -79,21 +112,19 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             val type = object : TypeToken<List<HabitEntity>>() {}.type
             val entities: List<HabitEntity> = gson.fromJson(json, type) ?: emptyList()
-            val today = LocalDate.now().format(dateFormatter)
+            val results = streakRepo.evaluateAll()
 
             val loadedHabits = entities.map { entity ->
                 val icon = HabitIconRegistry.iconFor(entity.iconName)
-
-                // Reset isCompleted if the latest completed date isn't today.
                 val completedDates = entity.completedDates ?: emptySet()
-                val isCompletedToday = completedDates.contains(today)
+                val engine = results[entity.id]
 
                 HabitItem(
                     id = entity.id,
                     title = entity.title,
                     icon = icon,
-                    streak = calculateStreak(completedDates),
-                    isCompleted = isCompletedToday,
+                    streak = engine?.currentStreak ?: 0,
+                    isCompleted = engine?.isCompleteToday == true,
                     reminderEnabled = entity.reminderEnabled,
                     reminderTime = entity.reminderTime,
                     reminderTime2 = entity.reminderTime2,
@@ -118,7 +149,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             habits.clear()
             habits.addAll(loadedHabits)
             ReminderScheduler.scheduleAll(getApplication())
-            // Normalize legacy icon names to stable ids on next save.
             val needsIconMigration = entities.any { e ->
                 HabitIconRegistry.premiumIconForId(e.iconName) == null &&
                     e.iconName != HabitIconRegistry.stableId(HabitIconRegistry.iconFor(e.iconName))
@@ -137,6 +167,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     id = it.id,
                     title = it.title,
                     iconName = HabitIconRegistry.stableId(it.icon),
+                    // Derived from the engine at load; persisted only for legacy readers.
                     isCompleted = it.isCompleted,
                     reminderEnabled = it.reminderEnabled,
                     reminderTime = it.reminderTime,
@@ -163,13 +194,13 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             getApplication<Application>().dataStore.edit { prefs ->
                 prefs[HABITS_KEY] = json
             }
-            
-            // Sync to Cloud
+
             try {
                 userRepository.saveHabits(json)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            streakRepo.invalidateSchedules()
             refreshHomeScreenWidgets()
         }
     }
@@ -192,6 +223,9 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                         prefs[HABITS_KEY] = json
                     }
                     applyHabitJson(json)
+                    streakRepo.migrateLegacyIfNeeded()
+                    streakRepo.invalidateSchedules()
+                    streakRepo.refreshDay()
                     refreshHomeScreenWidgets()
                 }
             } catch (_: Exception) {
@@ -200,7 +234,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Reload in-memory habits after a local wipe (account switch / sign-out). */
     fun onAccountSessionChanged() {
         viewModelScope.launch {
             habits.forEach { ReminderScheduler.cancel(getApplication(), it.id) }
@@ -210,11 +243,12 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addHabit(habit: HabitItem) {
-        habits.add(0, habit) // Add to the top
+        habits.add(0, habit)
         if (habit.reminderEnabled && (habit.reminderTime != null || habit.reminderTime2 != null)) {
             ReminderScheduler.schedule(getApplication(), habit)
         }
         saveHabits()
+        SessionEngagementTracker.recordEngagement(getApplication(), EngagementKind.HABIT_CREATED)
     }
 
     fun updateHabit(updated: HabitItem) {
@@ -232,31 +266,28 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleHabitCompletion(id: String) {
         val index = habits.indexOfFirst { it.id == id }
-        if (index != -1) {
-            val item = habits[index]
-            val todayStr = LocalDate.now().format(dateFormatter)
-            val newCompletedDates = item.completedDates.toMutableSet()
-            
-            val newIsCompleted = !item.isCompleted
-            
-            // STRICT: If already completed today, don't allow un-completing
-            if (item.isCompleted && item.completedDates.contains(todayStr)) {
-                return // Do nothing, stay completed
-            }
+        if (index == -1) return
+        val item = habits[index]
+        val todayStr = LocalDate.now().format(dateFormatter)
 
-            if (newIsCompleted) {
-                newCompletedDates.add(todayStr)
-            } else {
-                newCompletedDates.remove(todayStr)
+        // Already complete today — no undo. Streak result is the authority, not the stale flag.
+        if (item.isCompleted || item.completedDates.contains(todayStr)) return
+
+        viewModelScope.launch {
+            val result = streakRepo.complete(id)
+            val newDates = item.completedDates + todayStr
+            val streak = result?.currentStreak ?: (item.streak + 1)
+            val idx = habits.indexOfFirst { it.id == id }
+            if (idx != -1) {
+                habits[idx] = habits[idx].copy(
+                    isCompleted = true,
+                    completedDates = newDates,
+                    streak = streak,
+                )
             }
-            
-            val updatedItem = item.copy(
-                isCompleted = newIsCompleted,
-                completedDates = newCompletedDates,
-                streak = calculateStreak(newCompletedDates)
-            )
-            habits[index] = updatedItem
             saveHabits()
+            StreakNotifier.rescheduleAll(getApplication())
+            SessionEngagementTracker.recordEngagement(getApplication(), EngagementKind.HABIT_COMPLETED)
         }
     }
 
@@ -266,6 +297,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             habits.removeAt(index)
             ReminderScheduler.cancel(getApplication(), id)
             saveHabits()
+            SessionEngagementTracker.recordEngagement(getApplication(), EngagementKind.HABIT_ARCHIVED)
         }
     }
 
@@ -276,6 +308,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             habits[index] = item.copy(isArchived = true)
             ReminderScheduler.cancel(getApplication(), id)
             saveHabits()
+            SessionEngagementTracker.recordEngagement(getApplication(), EngagementKind.HABIT_ARCHIVED)
         }
     }
 
@@ -287,6 +320,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             habits[index] = item.copy(isPaused = newPausedState)
             if (newPausedState) {
                 ReminderScheduler.cancel(getApplication(), id)
+                SessionEngagementTracker.recordEngagement(getApplication(), EngagementKind.HABIT_PAUSED)
             } else if (item.reminderEnabled && (item.reminderTime != null || item.reminderTime2 != null)) {
                 ReminderScheduler.schedule(getApplication(), item)
             }
@@ -302,10 +336,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         saveHabits()
     }
 
-    /**
-     * Mark exactly one habit as the user's "Today's Focus" pinned card. Clears any
-     * previous pin. Pass null to unpin.
-     */
     fun setTodayFocus(habitId: String?) {
         var changed = false
         val ids = habits.map { it.id }
@@ -320,7 +350,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         if (changed) saveHabits()
     }
 
-    /** Returns the chain of habits stacked after [parentId] in order. */
     fun stackedAfter(parentId: String): List<HabitItem> {
         val result = mutableListOf<HabitItem>()
         val seen = mutableSetOf(parentId)
@@ -336,23 +365,38 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     fun completeHabitWithProof(habit: HabitItem, photoUrl: String) {
         val index = habits.indexOfFirst { it.id == habit.id }
-        if (index != -1) {
-            val item = habits[index]
-            val todayStr = LocalDate.now().format(dateFormatter)
-            val newCompletedDates = item.completedDates.toMutableSet()
-            newCompletedDates.add(todayStr)
-            
-            val newProofs = item.completionProofs.toMutableMap()
-            newProofs[todayStr] = photoUrl
-            
-            val updatedItem = item.copy(
-                isCompleted = true,
-                completedDates = newCompletedDates,
-                streak = calculateStreak(newCompletedDates),
-                completionProofs = newProofs
+        if (index == -1) return
+        val item = habits[index]
+        val todayStr = LocalDate.now().format(dateFormatter)
+
+        viewModelScope.launch {
+            val result = streakRepo.complete(
+                habitId = habit.id,
+                proofUrl = photoUrl,
+                source = CompletionSource.PROOF,
             )
-            habits[index] = updatedItem
+            val newDates = item.completedDates + todayStr
+            val newProofs = item.completionProofs + (todayStr to photoUrl)
+            val idx = habits.indexOfFirst { it.id == habit.id }
+            if (idx != -1) {
+                habits[idx] = habits[idx].copy(
+                    isCompleted = true,
+                    completedDates = newDates,
+                    streak = result?.currentStreak ?: (item.streak + 1),
+                    completionProofs = newProofs,
+                )
+            }
             saveHabits()
+            StreakNotifier.rescheduleAll(getApplication())
+        }
+    }
+
+    /** Spends a shield to repair a missed day. */
+    fun repairWithShield(habitId: String, missedDate: java.time.LocalDate, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val ok = runCatching { streakRepo.repairWithShield(habitId, missedDate) }.getOrDefault(false)
+            if (ok) runCatching { StreakNotifier.rescheduleAll(getApplication()) }
+            onResult(ok)
         }
     }
 }
