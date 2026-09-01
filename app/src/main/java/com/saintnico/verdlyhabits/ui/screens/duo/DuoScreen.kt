@@ -3,6 +3,7 @@ package com.saintnico.verdlyhabits.ui.screens.duo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,16 +82,43 @@ fun DuoScreen(
     referralState: ReferralUiState = ReferralUiState(),
     onOpenReferral: () -> Unit = {},
     onBack: (() -> Unit)? = null,
+    embeddedInArena: Boolean = false,
+    openBuddyPickerOnLaunch: Boolean = false,
+    onBuddyPickerHandled: () -> Unit = {},
+    openNudgeOnLaunch: Boolean = false,
+    onNudgeLaunchHandled: () -> Unit = {},
 ) {
     val friends by friendsViewModel.friendSummaries.collectAsState()
-    var requestBuddyPicker by remember { mutableStateOf(false) }
+    var requestBuddyPicker by remember { mutableStateOf(openBuddyPickerOnLaunch) }
     var nudgeTarget by remember { mutableStateOf<NudgeTarget?>(null) }
     val canInviteDuo = !duoState.blocksNewDuoInvite()
+
+    LaunchedEffect(openBuddyPickerOnLaunch) {
+        if (openBuddyPickerOnLaunch) {
+            requestBuddyPicker = true
+            onBuddyPickerHandled()
+        }
+    }
+
+    LaunchedEffect(openNudgeOnLaunch, duoState) {
+        if (openNudgeOnLaunch && duoState?.buddyUid?.isNotBlank() == true) {
+            nudgeTarget = NudgeTarget(
+                uid = duoState.buddyUid,
+                username = duoState.buddyUsername.ifBlank { "your buddy" },
+                photoUrl = duoState.buddyPhotoUrl,
+                surface = NudgeSurface.DUO,
+                situation = if (duoState.streakAtRisk) NudgeSituation.DUO_AT_RISK else NudgeSituation.DUO_WAITING_ON_THEM,
+                contextId = duoState.pairId,
+            )
+            onNudgeLaunchHandled()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            if (!embeddedInArena) {
+                TopAppBar(
                 title = {
                     Column {
                         Text(
@@ -115,12 +144,13 @@ fun DuoScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
+            }
         },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(if (embeddedInArena) PaddingValues(0.dp) else padding)
                 .verticalScroll(rememberScrollState()),
         ) {
             if (duoState != null) {

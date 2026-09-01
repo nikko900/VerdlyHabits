@@ -698,6 +698,9 @@ class ChallengeRepository {
         var newStreak = 0
         var oldRank = 0
         var newRank = 0
+        var ranksBefore = emptyMap<String, Int>()
+        var ranksAfter = emptyMap<String, Int>()
+        var habitName = "Challenge"
         var activityType = "checkin"
         var activityMessage = ""
         var activityDocSuffix = "checkin"
@@ -724,7 +727,9 @@ class ChallengeRepository {
 
                 val streaks = safeMap(snap.get("memberStreaks"))
                 val members = parseMemberIdsFromFirestore(snap.get("members"))
+                habitName = snap.getString("habitName") ?: snap.getString("name") ?: "Challenge"
                 val oldStreaks = members.map { it to ((streaks[it] as? Number)?.toInt() ?: 0) }.sortedByDescending { it.second }
+                ranksBefore = oldStreaks.mapIndexed { index, pair -> pair.first to (index + 1) }.toMap()
                 oldRank = oldStreaks.indexOfFirst { it.first == uid } + 1
                 val oldStreakVal = (streaks[uid] as? Number)?.toInt() ?: 0
 
@@ -789,6 +794,7 @@ class ChallengeRepository {
 
                 val newStreaks = members.map { it to ((streaks[it] as? Number)?.toInt() ?: 0) }.sortedByDescending { it.second }
                 newRank = newStreaks.indexOfFirst { it.first == uid } + 1
+                ranksAfter = newStreaks.mapIndexed { index, pair -> pair.first to (index + 1) }.toMap()
 
                 val missed = safeMap(snap.get("missedDays"))
                 missed[uid] = 0
@@ -864,6 +870,26 @@ class ChallengeRepository {
                     message = "@$username hit a $newStreak-day streak — $title!",
                     metadata = mapOf("completionDate" to date)
                 )
+            }
+
+            if (newRank < oldRank) {
+                val photoUrl = userDoc.getString("photoUrl")
+                members@ for (memberUid in ranksBefore.keys) {
+                    if (memberUid == uid) continue@members
+                    val before = ranksBefore[memberUid] ?: continue@members
+                    val after = ranksAfter[memberUid] ?: continue@members
+                    if (after > before) {
+                        com.saintnico.verdlyhabits.notifications.ChallengeNotificationDispatcher.notifyOvertaken(
+                            targetUid = memberUid,
+                            overtakerUsername = username,
+                            overtakerPhotoUrl = photoUrl,
+                            challengeId = challengeId,
+                            challengeTitle = habitName,
+                            victimNewRank = after,
+                            eventDate = date,
+                        )
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e("ChallengeRepo", "Activity write failed: ${e.message}")

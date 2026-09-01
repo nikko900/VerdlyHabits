@@ -19,8 +19,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AccountabilityViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -140,6 +142,17 @@ class AccountabilityViewModel(application: Application) : AndroidViewModel(appli
                 myUsername = myUsernameCache,
                 isPremium = premium,
             )
+            if (outcome.queuedOffline) {
+                val pairId = duoState.value?.pairId
+                if (!pairId.isNullOrBlank()) {
+                    enqueueDuoDayClose(
+                        pairId = pairId,
+                        completed = completedToday,
+                        total = activeHabits,
+                        allDone = allDone,
+                    )
+                }
+            }
             outcome.broken?.let { _streakBrokenEvent.emit(it) }
             outcome.milestone?.let { m ->
                 userStatsViewModel?.awardDuoMilestoneXp(m.streakDays)
@@ -157,5 +170,33 @@ class AccountabilityViewModel(application: Application) : AndroidViewModel(appli
                 }
             }
         }
+    }
+
+    private suspend fun enqueueDuoDayClose(
+        pairId: String,
+        completed: Int,
+        total: Int,
+        allDone: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        // Blocking Room DAO — must never run on Main (viewModelScope default).
+        val app = getApplication<Application>()
+        val dao = com.saintnico.verdlyhabits.data.local.AppDatabase.getDatabase(app).streakDao()
+        val zoneOffsetMinutes = java.time.ZoneId.systemDefault().rules
+            .getOffset(java.time.Instant.now()).totalSeconds / 60
+        val payload = mapOf(
+            "pairId" to pairId,
+            "completed" to completed,
+            "total" to total,
+            "allDone" to allDone,
+            "zoneOffsetMinutes" to zoneOffsetMinutes,
+        )
+        dao.enqueue(
+            com.saintnico.verdlyhabits.data.local.streak.PendingOpEntity(
+                kind = com.saintnico.verdlyhabits.data.local.streak.PendingOpKind.DUO_DAY_CLOSE.name,
+                payload = com.google.gson.Gson().toJson(payload),
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        com.saintnico.verdlyhabits.streak.StreakSyncWorker.enqueue(app)
     }
 }

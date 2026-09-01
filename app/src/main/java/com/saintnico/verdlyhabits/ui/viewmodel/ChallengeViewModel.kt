@@ -103,6 +103,17 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
         _pendingOpenChallengeId.value = null
     }
 
+    private val _pendingOpenCreate = MutableStateFlow(false)
+    val pendingOpenCreate: StateFlow<Boolean> = _pendingOpenCreate.asStateFlow()
+
+    fun requestOpenCreate() {
+        _pendingOpenCreate.value = true
+    }
+
+    fun consumePendingOpenCreate() {
+        _pendingOpenCreate.value = false
+    }
+
     /** Optional challenge context when opening a member profile from the challenge sheet. */
     private val _memberProfileHighlightChallengeId = MutableStateFlow<String?>(null)
     val memberProfileHighlightChallengeId: StateFlow<String?> = _memberProfileHighlightChallengeId.asStateFlow()

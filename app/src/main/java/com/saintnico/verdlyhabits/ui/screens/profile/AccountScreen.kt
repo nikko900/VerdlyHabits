@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.rounded.EmojiEvents
@@ -93,9 +94,16 @@ import com.saintnico.verdlyhabits.ui.components.TrophyHallHeaderRow
 import com.saintnico.verdlyhabits.ui.components.TrophyHallProgressBar
 import com.saintnico.verdlyhabits.ui.components.TrophyRankChip
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.CoinViewModel
+import com.saintnico.verdlyhabits.ui.components.coins.CoinBalanceChip
+import com.saintnico.verdlyhabits.ui.components.coins.CoinBurstAnimation
+import com.saintnico.verdlyhabits.ui.components.coins.CoinPackSheet
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.saintnico.verdlyhabits.engine.ProfileSocialEngine
 import com.saintnico.verdlyhabits.engine.ProfileTitleEngine
 import com.saintnico.verdlyhabits.util.DebugSessionLog
+import com.saintnico.verdlyhabits.ui.components.profilepremium.PremiumAccountBadge
+import com.saintnico.verdlyhabits.ui.components.profilepremium.PremiumMemberGradient
 import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileIdentityCard
 import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileSocialProofSection
 import com.saintnico.verdlyhabits.ui.components.profilepremium.ProfileTitlePickerSheet
@@ -162,6 +170,7 @@ fun AccountScreen(
     equippedTitleId: String?,
     onEquipTitle: (titleId: String?, titleLabel: String?) -> Unit,
     billingViewModel: BillingViewModel,
+    coinViewModel: CoinViewModel = viewModel(),
     friendsViewModel: FriendsViewModel,
     friendSummaries: List<FriendSummary>,
     duoState: DuoStreakState?,
@@ -172,6 +181,7 @@ fun AccountScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToAchievements: () -> Unit,
     onNavigateToChallenges: () -> Unit,
+    onNavigateToFocusGarden: () -> Unit = {},
     onNavigateToSubscription: () -> Unit,
     onNavigateToMemberProfile: (String) -> Unit,
     onOpenChallengeDetail: (String) -> Unit,
@@ -185,7 +195,11 @@ fun AccountScreen(
     onOpenNotifications: () -> Unit = {},
     notificationsViewModel: com.saintnico.verdlyhabits.ui.viewmodel.NotificationsViewModel,
 ) {
+    var showWrapped by remember { mutableStateOf(false) }
+    var showCoinPackSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val coinBalance by coinViewModel.balance.collectAsState()
+    val purchaseCelebration by coinViewModel.purchaseCelebration.collectAsState()
     val bg = MaterialTheme.colorScheme.background
     val primary = MaterialTheme.colorScheme.primary
     val onBg = MaterialTheme.colorScheme.onBackground
@@ -228,6 +242,8 @@ fun AccountScreen(
     val titleSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val isPro by billingViewModel.isPro.collectAsState()
+    val hasPaidSubscription by billingViewModel.hasPaidSubscription.collectAsState()
+    val membershipTier by billingViewModel.membershipTier.collectAsState()
     val career = remember(allUserChallenges, userId) {
         ProfileSocialEngine.careerInputs(allUserChallenges, userId)
     }
@@ -314,12 +330,18 @@ fun AccountScreen(
     }
 
     val inBonus = com.saintnico.verdlyhabits.referral.ReferralManager.isInBonusPeriod(context)
+    val isPremiumMember = membershipTier.showsPremiumBadge
     val proSubtitle = when {
-        isPro -> "Full Pro access on this device"
-        billingViewModel.isInFreeTrial() && !isPro ->
-            "Pro trial · ${billingViewModel.freeTrialDaysRemaining()} day${if (billingViewModel.freeTrialDaysRemaining() == 1) "" else "s"} left"
-        inBonus && !isPro -> "Referral bonus — Pro perks unlocked"
+        hasPaidSubscription -> "Premium member · all perks unlocked"
+        membershipTier == com.saintnico.verdlyhabits.data.model.MembershipTier.TRIAL ->
+            "Premium trial · ${billingViewModel.freeTrialDaysRemaining()} day${if (billingViewModel.freeTrialDaysRemaining() == 1) "" else "s"} left"
+        isPro -> "Premium access on this device"
+        inBonus && !isPro -> "Referral bonus — premium perks unlocked"
         else -> "Sounds, deep stats & unlimited habits"
+    }
+    val subscriptionRowTitle = when {
+        isPremiumMember -> "Premium Account"
+        else -> "Verdly Premium"
     }
 
     val displayBio = userBio.ifBlank { "Consistency is the craft." }
@@ -353,6 +375,8 @@ fun AccountScreen(
                     onOpenTitlePicker = { showTitlePicker = true },
                     notificationBadgeCount = notificationBadgeCount,
                     onOpenNotifications = onOpenNotifications,
+                    isPremiumMember = isPremiumMember,
+                    membershipTier = membershipTier,
                 )
             }
 
@@ -400,6 +424,101 @@ fun AccountScreen(
             }
 
             item {
+                Spacer(Modifier.height(12.dp))
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        "STATS",
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp,
+                        letterSpacing = 2.sp,
+                        color = onBg.copy(alpha = 0.55f),
+                    )
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    ) {
+                        SettingsRow(
+                            icon = Icons.Default.Spa,
+                            title = "Focus",
+                            subtitle = buildString {
+                                val mins = statsState.totalFocusMinutes
+                                append("${mins / 60}h ${mins % 60}m lifetime")
+                                append(" · open garden")
+                            },
+                            primary = Color(0xFF7B61FF),
+                            danger = false,
+                            showChevron = true,
+                            onClick = onNavigateToFocusGarden,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                CoinWalletCard(
+                    balance = coinBalance,
+                    isPremium = isPremiumMember,
+                    onGetCoins = { showCoinPackSheet = true },
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                Card(
+                    onClick = { showWrapped = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF14261D)),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFF1B4332), Color(0xFF14203A)),
+                                ),
+                            )
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "WEEKLY WRAPPED",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.4.sp,
+                                color = Color(0xFF52B788),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Replay your habit story",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp,
+                                color = Color.White,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "Streaks, weekly hit-rate, and your persona.",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(0.7f),
+                            )
+                        }
+                        Icon(
+                            Icons.Filled.ChevronRight,
+                            contentDescription = null,
+                            tint = Color.White.copy(0.85f),
+                        )
+                    }
+                }
+            }
+
+            item {
                 Spacer(Modifier.height(22.dp))
                 val notifState by notificationsViewModel.state.collectAsState()
                 val pulseFeed = remember(
@@ -407,8 +526,22 @@ fun AccountScreen(
                     notifState.items,
                     notifState.announcements,
                     notifState.dismissedAnnouncementIds,
+                    weeklyProfileViews,
+                    isPremiumMember,
                 ) {
-                    notificationsViewModel.pulseFeed(socialSnapshot.activityFeed)
+                    val merged = notificationsViewModel.pulseFeed(socialSnapshot.activityFeed)
+                    if (isPremiumMember && weeklyProfileViews > 0) {
+                        listOf(
+                            ProfileSocialEngine.ProfileActivityItem(
+                                id = "profile_views_week",
+                                message = "$weeklyProfileViews friend${if (weeklyProfileViews == 1) "" else "s"} viewed your profile this week",
+                                timestamp = System.currentTimeMillis(),
+                                accent = ProfileSocialEngine.ActivityAccent.NEUTRAL,
+                            ),
+                        ) + merged
+                    } else {
+                        merged
+                    }
                 }
                 ProfileSocialProofSection(
                     snapshot = socialSnapshot,
@@ -497,8 +630,8 @@ fun AccountScreen(
                     color = onBg.copy(alpha = 0.55f)
                 )
                 Spacer(Modifier.height(8.dp))
-                val rows: List<Pair<Triple<ImageVector, String, String>, () -> Unit>> = listOf(
-                    Triple(Icons.Default.WorkspacePremium, "Verdly Pro", proSubtitle) to onNavigateToSubscription,
+                val isPremiumMember = membershipTier.showsPremiumBadge
+                val settingsRows: List<Pair<Triple<ImageVector, String, String>, () -> Unit>> = listOf(
                     Triple(Icons.Default.Edit, "Edit Profile", "Photo, name, and bio") to onNavigateToEditProfile,
                     Triple(Icons.Default.Notifications, "Notifications", "Reminders and alerts") to onNavigateToSettings,
                     Triple(Icons.Default.PrivacyTip, "Privacy", "Data and visibility") to onNavigateToSettings,
@@ -507,7 +640,26 @@ fun AccountScreen(
                     Triple(Icons.Default.Help, "Help & Support", "FAQs and contact") to onNavigateToSettings,
                 )
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    rows.forEachIndexed { index, (triple, onClick) ->
+                    if (isPremiumMember) {
+                        PremiumMembershipRow(
+                            title = subscriptionRowTitle,
+                            subtitle = proSubtitle,
+                            membershipTier = membershipTier,
+                            onClick = onNavigateToSubscription,
+                        )
+                    } else {
+                        SettingsRow(
+                            icon = Icons.Default.WorkspacePremium,
+                            title = subscriptionRowTitle,
+                            subtitle = proSubtitle,
+                            primary = primary,
+                            danger = false,
+                            showChevron = true,
+                            onClick = onNavigateToSubscription,
+                        )
+                    }
+                    HorizontalDivider(color = onBg.copy(alpha = 0.06f))
+                    settingsRows.forEachIndexed { index, (triple, onClick) ->
                         val (icon, title, subtitle) = triple
                         SettingsRow(
                             icon = icon,
@@ -518,7 +670,7 @@ fun AccountScreen(
                             showChevron = true,
                             onClick = onClick
                         )
-                        if (index < rows.lastIndex) {
+                        if (index < settingsRows.lastIndex) {
                             HorizontalDivider(color = onBg.copy(alpha = 0.06f))
                         }
                     }
@@ -554,6 +706,31 @@ fun AccountScreen(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showCoinPackSheet) {
+        CoinPackSheet(
+            isOpen = true,
+            billingViewModel = billingViewModel,
+            isPremium = isPremiumMember,
+            onDismiss = { showCoinPackSheet = false },
+            onPurchaseSuccess = { coinViewModel.celebratePurchase() },
+        )
+    }
+
+    if (purchaseCelebration) {
+        Box(Modifier.fillMaxSize()) {
+            CoinBurstAnimation(
+                premium = isPremiumMember,
+                onFinished = { coinViewModel.endCelebration() },
+            )
+        }
+    }
+
+    if (showWrapped) {
+        com.saintnico.verdlyhabits.ui.screens.stats.WrappedStoryScreen(
+            onClose = { showWrapped = false },
+        )
     }
 
     if (showTitlePicker) {
@@ -866,9 +1043,8 @@ private fun ArenaChallengeCard(
 ) {
     val rank = challenge.rankOf(userId).takeIf { it > 0 } ?: 0
     val streak = challenge.streakFor(userId)
-    val dayMs = 24 * 60 * 60 * 1000L
-    val totalDays = (((challenge.endDate - challenge.startDate) / dayMs).toInt()).coerceAtLeast(1)
-    val elapsed = challenge.daysElapsed().coerceAtMost(totalDays)
+    val totalDays = challenge.durationDays()
+    val elapsed = challenge.currentDayIndex()
     val frac = (elapsed.toFloat() / totalDays.toFloat()).coerceIn(0f, 1f)
     val daysLeft = challenge.daysRemaining().toInt()
     val isLeader = rank == 1 && challenge.members.size > 1
@@ -1077,6 +1253,142 @@ private fun ArenaChallengeCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumMembershipRow(
+    title: String,
+    subtitle: String,
+    membershipTier: com.saintnico.verdlyhabits.data.model.MembershipTier,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val onBg = MaterialTheme.colorScheme.onBackground
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        GoldColor.copy(alpha = 0.16f),
+                        GoldColor.copy(alpha = 0.06f),
+                    ),
+                ),
+            )
+            .border(1.dp, GoldColor.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(color = GoldColor.copy(alpha = 0.12f)),
+                onClick = onClick,
+            )
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(PremiumMemberGradient),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.WorkspacePremium,
+                contentDescription = null,
+                tint = Color(0xFF1A1208),
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = onBg,
+                )
+                Spacer(Modifier.width(8.dp))
+                PremiumAccountBadge(
+                    label = when (membershipTier) {
+                        com.saintnico.verdlyhabits.data.model.MembershipTier.TRIAL -> "TRIAL"
+                        else -> "ACTIVE"
+                    },
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                fontSize = 12.sp,
+                color = onBg.copy(alpha = 0.58f),
+            )
+        }
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = GoldColor.copy(alpha = 0.7f),
+        )
+    }
+}
+
+@Composable
+private fun CoinWalletCard(
+    balance: Int,
+    isPremium: Boolean,
+    onGetCoins: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onBg = MaterialTheme.colorScheme.onBackground
+    Card(
+        onClick = onGetCoins,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "COIN WALLET",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.4.sp,
+                    color = primary.copy(alpha = 0.75f),
+                )
+                Spacer(Modifier.height(8.dp))
+                CoinBalanceChip(
+                    balance = balance,
+                    isPremium = isPremium,
+                    onClick = onGetCoins,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Use coins to stake on challenges and support rivals.",
+                    fontSize = 12.sp,
+                    color = onBg.copy(alpha = 0.55f),
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    "Get coins",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = primary,
+                )
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = onBg.copy(alpha = 0.35f),
+                )
             }
         }
     }

@@ -6,13 +6,14 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.functions.FirebaseFunctions
 import com.saintnico.verdlyhabits.engine.DuoStreakEngine
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import java.util.concurrent.TimeUnit
 
 data class DuoStreakState(
     val pairId: String = "",
@@ -35,15 +36,14 @@ data class DuoStreakState(
     val graceUsedThisWeek: Boolean = false,
 )
 
-/** Emitted when shared streak increments to a celebration milestone. */
 data class DuoMilestoneReached(val streakDays: Int, val buddyUsername: String, val pairId: String)
 
-/** Emitted when the cooperative streak resets after a missed day. */
 data class DuoStreakBroken(val previousStreak: Int, val buddyUsername: String, val pairId: String)
 
 class AccountabilityRepository {
     private val firestore = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val functions = FirebaseFunctions.getInstance()
 
     companion object {
         private const val TAG = "AccountabilityRepo"
@@ -193,19 +193,8 @@ class AccountabilityRepository {
                 ),
             )
             ref.set(payload).await()
-            Log.d(TAG, "inviteBuddy: created duoStreaks/$id")
             Result.success(Unit)
-        } catch (e: FirebaseFirestoreException) {
-            Log.e(TAG, "inviteBuddy firestore ${e.code}", e)
-            val message = when (e.code) {
-                FirebaseFirestoreException.Code.ALREADY_EXISTS -> "Invite already sent or active"
-                FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                    "Couldn't send duo invite — deploy latest Firestore rules and try again"
-                else -> e.message ?: "Couldn't send duo invite"
-            }
-            Result.failure(IllegalStateException(message))
         } catch (e: Exception) {
-            Log.e(TAG, "inviteBuddy failed", e)
             Result.failure(e)
         }
     }
@@ -242,12 +231,9 @@ class AccountabilityRepository {
         }
     }
 
-    /**
-     * Pro perk: forgive yesterday's miss once per ISO week.
-     */
     suspend fun applyDuoGrace(pairId: String, isPremium: Boolean): Result<Unit> {
         if (!isPremium) return Result.failure(IllegalStateException("Duo streak shield is a Pro perk"))
-        val me = currentUid ?: return Result.failure(IllegalStateException("Sign in first"))
+        currentUid ?: return Result.failure(IllegalStateException("Sign in first"))
         return try {
             val ref = pairsRef().document(pairId)
             val snap = ref.get().await()
@@ -272,88 +258,78 @@ class AccountabilityRepository {
         val milestone: DuoMilestoneReached? = null,
         val broken: DuoStreakBroken? = null,
         val buddyJustFinished: Boolean = false,
+        /** True when the CF call failed and was queued for retry — day is NOT client-closed. */
+        val queuedOffline: Boolean = false,
     )
 
+    /**
+     * Reports progress through the server-authoritative callable. Never closes a duo day
+     * from the client — if the call fails, the caller should enqueue a retry.
+     */
     suspend fun syncMyProgress(
         completed: Int,
         total: Int,
         allDone: Boolean,
         myUsername: String,
         isPremium: Boolean,
+        pairIdHint: String? = null,
     ): SyncOutcome {
         val me = currentUid ?: return SyncOutcome()
-        try {
-            val snap = pairsRef().whereArrayContains("members", me).limit(1).get().await()
-            val doc = snap.documents.firstOrNull() ?: return SyncOutcome()
-            if (doc.getString("status") != "active") return SyncOutcome()
+        return try {
+            val pairId = pairIdHint ?: run {
+                val snap = pairsRef().whereArrayContains("members", me).limit(1).get().await()
+                snap.documents.firstOrNull()?.id
+            } ?: return SyncOutcome()
 
-            val members = (doc.get("members") as? List<*>)?.filterIsInstance<String>().orEmpty()
+            val before = pairsRef().document(pairId).get().await()
+            if (before.getString("status") != "active") return SyncOutcome()
+            val members = (before.get("members") as? List<*>)?.filterIsInstance<String>().orEmpty()
             val buddyUid = members.firstOrNull { it != me }.orEmpty()
-            val profiles = doc.get("memberProfiles") as? Map<*, *>
+            val profiles = before.get("memberProfiles") as? Map<*, *>
             val buddyProfile = profiles?.get(buddyUid) as? Map<*, *>
             val buddyUsername = buddyProfile?.get("username") as? String ?: "Your buddy"
-
-            var broken: DuoStreakBroken? = null
-            val lastBoth = doc.getString("lastBothCompleteDate")
-            val graceForgiven = doc.getString("graceForgivenDate")
-            val graceWeekKey = doc.getString("graceWeekKey")
-            val currentStreak = (doc.getLong("streakDays") ?: 0L).toInt()
-            val canDeferWithGrace = isPremium && DuoStreakEngine.graceAvailableThisWeek(graceWeekKey, isPremium)
-            if (DuoStreakEngine.shouldResetStreak(lastBoth, graceForgiven, currentStreak) && !canDeferWithGrace) {
-                doc.reference.update(
-                    mapOf(
-                        "streakDays" to 0,
-                        "lastStreakBrokenAt" to FieldValue.serverTimestamp(),
-                    ),
-                ).await()
-                broken = DuoStreakBroken(currentStreak, buddyUsername, doc.id)
+            val previousStreak = (before.getLong("streakDays") ?: 0L).toInt()
+            val lastBoth = before.getString("lastBothCompleteDate")
+            val graceForgiven = before.getString("graceForgivenDate")
+            val broken = if (DuoStreakEngine.shouldResetStreak(lastBoth, graceForgiven, previousStreak)) {
+                // Reset remains client-visible via listener once the CF or a later pass
+                // observes the miss; we still emit locally so the UI can react immediately.
+                DuoStreakBroken(previousStreak, buddyUsername, pairId)
+            } else {
+                null
             }
 
-            val freshSnap = doc.reference.get().await()
-            val today = todayKey()
-            val progress = freshSnap.get("memberProgress") as? Map<*, *>
-            val myMap = progress?.get(me) as? Map<*, *>
-            val wasDone = myMap?.get("date") == today && myMap?.get("allDone") == true
-            val buddyMap = progress?.get(buddyUid) as? Map<*, *>
-            val buddyDate = buddyMap?.get("date") as? String
-            val buddyWasDone = buddyDate == today && buddyMap?.get("allDone") == true
-
-            val progressField = "memberProgress.$me"
-            val updates = mutableMapOf<String, Any>(
-                progressField to mapOf(
-                    "date" to today,
-                    "completed" to completed,
-                    "total" to total,
-                    "allDone" to allDone,
-                ),
+            val zoneOffsetMinutes = ZoneId.systemDefault().rules
+                .getOffset(java.time.Instant.now()).totalSeconds / 60
+            val payload = hashMapOf(
+                "pairId" to pairId,
+                "completed" to completed,
+                "total" to total,
+                "allDone" to allDone,
+                "zoneOffsetMinutes" to zoneOffsetMinutes,
             )
 
-            val buddyAllDone = buddyWasDone
-            val lastBothFresh = freshSnap.getString("lastBothCompleteDate")
-            var milestone: DuoMilestoneReached? = null
-            if (allDone && buddyAllDone && lastBothFresh != today) {
-                val newStreak = (freshSnap.getLong("streakDays") ?: 0L).toInt() + 1
-                updates["streakDays"] = newStreak
-                updates["lastBothCompleteDate"] = today
-                val awarded = (freshSnap.get("milestonesAwarded") as? List<*>)?.filterIsInstance<Number>()
-                    ?.map { it.toInt() }.orEmpty()
-                if (newStreak in DuoStreakEngine.CELEBRATION_MILESTONES && newStreak !in awarded) {
-                    updates["milestonesAwarded"] = awarded + newStreak
-                    milestone = DuoMilestoneReached(newStreak, buddyUsername, freshSnap.id)
-                }
-            }
+            val callableResult = functions
+                .getHttpsCallable("reportDuoDayProgress")
+                .withTimeout(20, TimeUnit.SECONDS)
+                .call(payload)
+                .await()
+            @Suppress("UNCHECKED_CAST")
+            val result = callableResult.getData() as? Map<*, *>
 
-            freshSnap.reference.update(updates).await()
+            val newStreak = (result?.get("streakDays") as? Number)?.toInt() ?: previousStreak
+            val milestoneDays = (result?.get("milestone") as? Number)?.toInt()
+            val buddyDone = result?.get("buddyDone") == true
+            val closedToday = result?.get("closedToday") == true
 
-            val buddyJustFinished = allDone && !wasDone && buddyWasDone
-            return SyncOutcome(
-                milestone = milestone,
-                broken = broken,
-                buddyJustFinished = buddyJustFinished,
+            SyncOutcome(
+                milestone = milestoneDays?.let { DuoMilestoneReached(it, buddyUsername, pairId) },
+                broken = if (newStreak == 0 && previousStreak > 0) broken else null,
+                buddyJustFinished = allDone && buddyDone && closedToday,
             )
         } catch (e: Exception) {
-            Log.w(TAG, "syncMyProgress failed", e)
-            return SyncOutcome()
+            Log.w(TAG, "syncMyProgress CF failed — queue for retry", e)
+            SyncOutcome(queuedOffline = true)
         }
     }
 

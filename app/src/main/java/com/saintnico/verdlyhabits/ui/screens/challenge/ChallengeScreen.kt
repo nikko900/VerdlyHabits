@@ -144,6 +144,7 @@ fun ChallengeScreen(
     val connections by friendsViewModel.friendSummaries.collectAsState()
     val state by viewModel.state.collectAsState()
     val pendingOpenChallengeId by viewModel.pendingOpenChallengeId.collectAsState()
+    val pendingOpenCreate by viewModel.pendingOpenCreate.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var selectedChallenge by remember { mutableStateOf<Challenge?>(null) }
@@ -163,6 +164,13 @@ fun ChallengeScreen(
         viewModel.consumePendingOpenChallengeDetail()
     }
 
+    LaunchedEffect(pendingOpenCreate) {
+        if (pendingOpenCreate) {
+            showCreateDialog = true
+            viewModel.consumePendingOpenCreate()
+        }
+    }
+
     val userUsername by settingsViewModel.userUsername.collectAsState()
     val coinBalance by coinViewModel.balance.collectAsState()
     val isPremium by billingViewModel.isPro.collectAsState()
@@ -176,12 +184,11 @@ fun ChallengeScreen(
 
     LaunchedEffect(state.challenges, isPremium) {
         coinViewModel.resolveStakes(state.challenges + state.archivedChallenges, isPremium)
-        coinViewModel.grantMonthlyDripIfDue(isPremium)
     }
 
     LaunchedEffect(coinNotice) {
         coinNotice?.let { notice ->
-            onShowNotification?.invoke(notice.message, notice.isPositive)
+            onShowNotification?.invoke(notice.message, !notice.isPositive)
             coinViewModel.consumeNotice()
         }
     }
