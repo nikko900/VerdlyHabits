@@ -3,6 +3,7 @@ package com.saintnico.verdlyhabits.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -19,70 +20,72 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The thin "Momentum" bar that sits at the very top of the dashboard. Fills as
- * habits are completed today. A multi-stop gradient gives it visible energy even
- * at low fill.
- *
- *  - [progress] in 0f..1f
- *  - [xpToday]  total XP earned in the current day
+ * Thin momentum bar under the greeting. Fills as habits are completed today.
  */
 @Composable
 fun MomentumBar(
     progress: Float,
     xpToday: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val animated by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(700),
-        label = "momentum"
+        label = "momentum",
     )
 
+    val isDark = isSystemInDarkTheme()
     val primary = MaterialTheme.colorScheme.primary
-    val gold = Color(0xFFFFB300)
+    val gold = Color(0xFFD4890A)
+    val onBg = MaterialTheme.colorScheme.onBackground
+    val trackAlpha = if (isDark) 0.10f else 0.16f
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = "Momentum",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "+$xpToday XP today",
+                text = "Today's momentum",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = onBg.copy(alpha = if (isDark) 0.58f else 0.72f),
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "+$xpToday XP",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = primary,
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(7.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.07f))
+                .height(if (isDark) 7.dp else 9.dp)
+                .clip(RoundedCornerShape(50))
+                .background(onBg.copy(alpha = trackAlpha)),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animated)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                primary.copy(alpha = 0.85f),
-                                primary,
-                                gold
-                            )
-                        )
-                    )
-            )
+            if (animated > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(animated.coerceAtLeast(0.04f))
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Mint.copy(alpha = 0.9f),
+                                    primary,
+                                    gold,
+                                ),
+                            ),
+                        ),
+                )
+            }
         }
     }
 }
+
+private val Mint = Color(0xFF52B788)

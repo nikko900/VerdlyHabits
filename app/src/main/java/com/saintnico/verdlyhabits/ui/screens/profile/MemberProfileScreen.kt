@@ -357,6 +357,7 @@ fun MemberProfileScreen(
                                     accent = memberAccent,
                                     equippedTitle = displayEquippedTitle,
                                     equippedTitleColor = titleColor,
+                                    membershipTier = p.membershipTier,
                                 )
                             }
                             IconButton(

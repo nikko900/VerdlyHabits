@@ -17,7 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.EmojiEvents
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,6 +52,9 @@ import com.saintnico.verdlyhabits.ui.components.TrophyHallListRow
 import com.saintnico.verdlyhabits.ui.components.TrophyHallSectionDivider
 import com.saintnico.verdlyhabits.ui.components.TrophyRankChip
 import com.saintnico.verdlyhabits.ui.components.tierLevelToVisualTier
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.platform.LocalContext
+import com.saintnico.verdlyhabits.ui.components.share.shareAchievementCard
 import com.saintnico.verdlyhabits.ui.theme.GoldColor
 import java.time.Instant
 import java.time.ZoneId
@@ -188,6 +193,7 @@ fun AchievementsScreen(
     selectedAchievement?.let { vt ->
         val a = vt.achievement
         val visualTier = tierLevelToVisualTier(vt.tier)
+        val context = LocalContext.current
         ModalBottomSheet(
             onDismissRequest = { selectedAchievement = null },
             sheetState = sheetState,
@@ -274,6 +280,22 @@ fun AchievementsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = onBg.copy(alpha = 0.45f)
                     )
+                }
+
+                if (a.isUnlocked) {
+                    Spacer(Modifier.height(24.dp))
+                    Button(
+                        onClick = { shareAchievementCard(context, a) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GoldColor.copy(alpha = 0.15f),
+                            contentColor = GoldColor,
+                        ),
+                    ) {
+                        Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Share trophy", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

@@ -21,29 +21,42 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import android.net.Uri
 import com.saintnico.verdlyhabits.data.local.goals.GoalType
+import com.saintnico.verdlyhabits.ui.components.habit.HabitPlantedCelebrationDialog
 import com.saintnico.verdlyhabits.monetization.PaywallTrigger
 import com.saintnico.verdlyhabits.navigation.NotificationLaunch
 import com.saintnico.verdlyhabits.session.clearSignedOutSession
 import com.saintnico.verdlyhabits.session.prepareSignedInSession
+import com.saintnico.verdlyhabits.challenge.ChallengeInviteManager
+import com.saintnico.verdlyhabits.audio.AppAudio
+import com.saintnico.verdlyhabits.audio.rememberAppHaptics
+import androidx.activity.compose.BackHandler
 import com.saintnico.verdlyhabits.ui.components.PremiumNotificationBar
-import com.saintnico.verdlyhabits.ui.components.ProPaywallSheet
+import com.saintnico.verdlyhabits.ui.components.RevenueCatProPaywallDialog
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralAnnualOfferSheet
 import com.saintnico.verdlyhabits.ui.components.referral.ReferralShareSheet
 import com.saintnico.verdlyhabits.ui.components.social.blocksNewDuoInvite
 import com.saintnico.verdlyhabits.ui.components.social.needsDuoAttention
+import com.saintnico.verdlyhabits.engine.GoalCelebrationCopy
+import com.saintnico.verdlyhabits.engine.GoalProgressEngine
+import com.saintnico.verdlyhabits.ui.components.TrophyUnlockCeremony
+import com.saintnico.verdlyhabits.ui.components.share.shareAchievementCard
+import com.saintnico.verdlyhabits.ui.components.share.shareGoalMilestoneCard
 import com.saintnico.verdlyhabits.ui.screens.achievements.AchievementsScreen
-import com.saintnico.verdlyhabits.ui.screens.challenge.ChallengeScreen
-import com.saintnico.verdlyhabits.ui.screens.duo.DuoScreen
+import com.saintnico.verdlyhabits.ui.screens.arena.ArenaScreen
+import com.saintnico.verdlyhabits.ui.screens.arena.ArenaSegment
 import com.saintnico.verdlyhabits.ui.screens.focus.FocusModeScreen
 import com.saintnico.verdlyhabits.ui.screens.focus.PlantGardenScreen
 import com.saintnico.verdlyhabits.ui.screens.goals.GoalsHomeScreen
 import com.saintnico.verdlyhabits.ui.screens.goals.celebration.GoalCompletionScreen
+import com.saintnico.verdlyhabits.ui.screens.goals.celebration.GoalMomentRitualScreen
 import com.saintnico.verdlyhabits.ui.screens.goals.celebration.MilestoneCelebrationScreen
+import com.saintnico.verdlyhabits.ui.screens.goals.nudge.MaintainNudgeSheet
 import com.saintnico.verdlyhabits.ui.screens.goals.checkin.WeeklyCheckInSheet
 import com.saintnico.verdlyhabits.ui.screens.goals.creation.GoalCreationScreen
 import com.saintnico.verdlyhabits.ui.screens.goals.detail.GoalDetailScreen
 import com.saintnico.verdlyhabits.ui.screens.habit.AddHabitScreen
 import com.saintnico.verdlyhabits.ui.screens.home.HomeScreen
+import com.saintnico.verdlyhabits.ui.screens.login.EmailSignInScreen
 import com.saintnico.verdlyhabits.ui.screens.login.LoginScreen
 import com.saintnico.verdlyhabits.ui.screens.login.SignUpScreen
 import com.saintnico.verdlyhabits.ui.screens.mood.MoodCheckInScreen
@@ -57,6 +70,8 @@ import com.saintnico.verdlyhabits.ui.screens.stats.StatsScreen
 import com.saintnico.verdlyhabits.ui.viewmodel.AccountabilityViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.BillingViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.ChallengeViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.CoinViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.ProfileSocialViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.FocusViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.FriendsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.GoalCelebration
@@ -64,9 +79,17 @@ import com.saintnico.verdlyhabits.ui.viewmodel.GoalsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.HabitViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.MoodViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.NotificationsViewModel
+import com.saintnico.verdlyhabits.ui.viewmodel.ReEngagementViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.ReferralViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.SettingsViewModel
 import com.saintnico.verdlyhabits.ui.viewmodel.UserStatsViewModel
+import com.saintnico.verdlyhabits.data.engagement.ComebackDestination
+import com.saintnico.verdlyhabits.ui.screens.reengagement.WelcomeBackScreen
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.saintnico.verdlyhabits.notifications.InboxLocalNotifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,12 +100,14 @@ sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
     object Login : Screen("login")
     object SignUp : Screen("signup")
+    object EmailSignIn : Screen("email_signin")
     object Main : Screen("main")           // Shell with bottom nav
     object Home : Screen("home")
     object Stats : Screen("stats")
     object Focus : Screen("focus")
     object Goals : Screen("goals")
     object Profile : Screen("profile")
+    object Arena : Screen("arena")
     object Challenges : Screen("challenges")
     object Duo : Screen("duo")
     object Achievements : Screen("achievements")
@@ -95,6 +120,17 @@ sealed class Screen(val route: String) {
     object ProfileSetup : Screen("profile_setup")
     object MoodCheckIn : Screen("mood_checkin")
 }
+
+/** Maps NavHost destination routes (including query templates) to bottom-nav tab ids. */
+internal fun normalizeMainTabRoute(route: String): String = when {
+    route.startsWith("goals") -> "goals"
+    route.startsWith("arena") -> "arena"
+    route == "duo" || route == "challenges" -> "arena"
+    else -> route.substringBefore("?").substringBefore("/")
+}
+
+internal fun isMainTabRoute(route: String): Boolean =
+    bottomNavItems.any { it.route == normalizeMainTabRoute(route) }
 
 @Composable
 fun VerdlyNavGraph(
@@ -112,6 +148,7 @@ fun VerdlyNavGraph(
     val moodViewModel: MoodViewModel = viewModel()
     val focusViewModel: FocusViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
+    val reEngagementViewModel: ReEngagementViewModel = viewModel()
 
     var notificationMessage by remember { mutableStateOf("") }
     var showNotification by remember { mutableStateOf(false) }
@@ -120,8 +157,21 @@ fun VerdlyNavGraph(
     val coroutineScope = rememberCoroutineScope()
 
     var paywallTrigger by remember { mutableStateOf<PaywallTrigger?>(null) }
+    var habitPlantedCelebration by remember {
+        mutableStateOf<Pair<Int, String>?>(null) // count, title
+    }
     val hasFullAccess by billingViewModel.hasFullAccess.collectAsState()
     val hasPaidSubscription by billingViewModel.hasPaidSubscription.collectAsState()
+    val membershipTier by billingViewModel.membershipTier.collectAsState()
+
+    LaunchedEffect(membershipTier) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                com.saintnico.verdlyhabits.data.remote.firestore.UserRepository()
+                    .syncMembershipTier(membershipTier)
+            }
+        }
+    }
 
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val streakRepo = remember { com.saintnico.verdlyhabits.data.streak.StreakRepository.get(appContext) }
@@ -129,7 +179,11 @@ fun VerdlyNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val onMainSurface = navBackStackEntry?.destination?.route == Screen.Main.route
     val habitsReady = habitViewModel.habits.isNotEmpty()
-    val lossToSurface = streakSnap.lossToSurface?.takeIf { onMainSurface && habitsReady }
+    val welcomeBackState by reEngagementViewModel.state.collectAsState()
+    val showWelcomeBack = welcomeBackState.visible && onMainSurface && habitsReady
+    val lossToSurface = streakSnap.lossToSurface?.takeIf {
+        onMainSurface && habitsReady && !showWelcomeBack
+    }
     var lossAcknowledging by remember { mutableStateOf(false) }
 
     LaunchedEffect(paywallTrigger) {
@@ -171,6 +225,7 @@ fun VerdlyNavGraph(
     LaunchedEffect(Unit) {
         val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         if (user != null) {
+            billingViewModel.syncIdentity(user.uid)
             prepareSignedInSession(
                 context = navController.context,
                 habitViewModel = habitViewModel,
@@ -196,6 +251,9 @@ fun VerdlyNavGraph(
                 LoginScreen(
                     onLoginSuccess = {
                         coroutineScope.launch {
+                            billingViewModel.syncIdentity(
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid,
+                            )
                             prepareSignedInSession(
                                 context = navController.context,
                                 habitViewModel = habitViewModel,
@@ -214,6 +272,9 @@ fun VerdlyNavGraph(
                     },
                     onNewUser = {
                         coroutineScope.launch {
+                            billingViewModel.syncIdentity(
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid,
+                            )
                             prepareSignedInSession(
                                 context = navController.context,
                                 habitViewModel = habitViewModel,
@@ -225,16 +286,81 @@ fun VerdlyNavGraph(
                             }
                         }
                     },
+                    onNavigateToSignUp = {
+                        navController.navigate(Screen.SignUp.route)
+                    },
+                    onNavigateToEmailSignIn = {
+                        navController.navigate(Screen.EmailSignIn.route)
+                    },
+                )
+            }
+
+            composable(Screen.EmailSignIn.route) {
+                EmailSignInScreen(
+                    onSignInSuccess = {
+                        coroutineScope.launch {
+                            billingViewModel.syncIdentity(
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid,
+                            )
+                            prepareSignedInSession(
+                                context = navController.context,
+                                habitViewModel = habitViewModel,
+                                userStatsViewModel = userStatsViewModel,
+                                settingsViewModel = settingsViewModel,
+                            )
+                            val needsSetup = runCatching {
+                                com.saintnico.verdlyhabits.data.remote.firestore.UserRepository()
+                                    .needsUsernameSetup()
+                            }.getOrDefault(true)
+                            val dest = if (needsSetup) Screen.ProfileSetup.route else Screen.Main.route
+                            navController.navigate(dest) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        }
+                    },
+                    onNeedsProfileSetup = {
+                        coroutineScope.launch {
+                            billingViewModel.syncIdentity(
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid,
+                            )
+                            prepareSignedInSession(
+                                context = navController.context,
+                                habitViewModel = habitViewModel,
+                                userStatsViewModel = userStatsViewModel,
+                                settingsViewModel = settingsViewModel,
+                            )
+                            navController.navigate(Screen.ProfileSetup.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        }
+                    },
+                    onBackToLogin = { navController.popBackStack() },
+                    onNavigateToSignUp = {
+                        navController.navigate(Screen.SignUp.route) {
+                            popUpTo(Screen.EmailSignIn.route) { inclusive = true }
+                        }
+                    },
                 )
             }
 
             composable(Screen.SignUp.route) {
                 SignUpScreen(
                     onSignUpSuccess = {
-                        settingsViewModel.markOnboardingCompleted()
-                        settingsViewModel.syncProfileFromFirebase()
-                        navController.navigate(Screen.ProfileSetup.route) {
-                            popUpTo(Screen.SignUp.route) { inclusive = true }
+                        coroutineScope.launch {
+                            billingViewModel.syncIdentity(
+                                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid,
+                            )
+                            prepareSignedInSession(
+                                context = navController.context,
+                                habitViewModel = habitViewModel,
+                                userStatsViewModel = userStatsViewModel,
+                                settingsViewModel = settingsViewModel,
+                            )
+                            settingsViewModel.markOnboardingCompleted()
+                            settingsViewModel.syncProfileFromFirebase()
+                            navController.navigate(Screen.ProfileSetup.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
                         }
                     },
                     onBackToLogin = {
@@ -315,6 +441,7 @@ fun VerdlyNavGraph(
                     challengeViewModel = challengeViewModel,
                     friendsViewModel = friendsViewModel,
                     goalsViewModel = goalsViewModel,
+                    reEngagementViewModel = reEngagementViewModel,
                     billingViewModel = billingViewModel,
                     hasFullAccess = hasFullAccess,
                     onRequestPaywall = { paywallTrigger = it },
@@ -358,6 +485,10 @@ fun VerdlyNavGraph(
                         habitViewModel.addHabit(habit)
                         navController.popBackStack()
                         showEpicNotification("Seed planted successfully!")
+                        val newCount = count + 1
+                        if (!hasFullAccess && newCount in 2..4) {
+                            habitPlantedCelebration = newCount to habit.title
+                        }
                     },
                     onShowNotification = { msg, isError -> showEpicNotification(msg, isError) }
                 )
@@ -465,15 +596,31 @@ fun VerdlyNavGraph(
             icon = notificationIcon
         )
 
-        ProPaywallSheet(
+        habitPlantedCelebration?.let { (count, title) ->
+            HabitPlantedCelebrationDialog(
+                visible = true,
+                habitCount = count,
+                habitTitle = title,
+                onDismiss = { habitPlantedCelebration = null },
+                onSeePro = {
+                    habitPlantedCelebration = null
+                    paywallTrigger = PaywallTrigger.HabitPlanted
+                },
+            )
+        }
+
+        RevenueCatProPaywallDialog(
             isOpen = paywallTrigger != null,
-            trigger = paywallTrigger,
             billingViewModel = billingViewModel,
             onDismiss = { paywallTrigger = null },
-            onRestorePurchases = { billingViewModel.restorePurchases() },
+            onPurchaseSuccess = {
+                showEpicNotification(
+                    message = "Welcome to Premium!",
+                    icon = Icons.Rounded.Redeem,
+                )
+            },
         )
 
-        // Streak repair is offered from Home (banner + tap), not as an interrupt on every open.
         if (lossToSurface != null && !lossAcknowledging) {
             val loss = lossToSurface
             val title = habitViewModel.habits.firstOrNull { it.id == loss.habitId }?.title ?: "Your habit"
@@ -499,6 +646,24 @@ fun VerdlyNavGraph(
                 },
             )
         }
+
+        if (showWelcomeBack) {
+            WelcomeBackScreen(
+                headline = welcomeBackState.headline,
+                body = welcomeBackState.body,
+                contextLine = welcomeBackState.contextLine,
+                primaryLabel = welcomeBackState.primaryLabel,
+                suggestedHabit = welcomeBackState.suggestedHabit,
+                onPrimaryAction = {
+                    if (welcomeBackState.destination == ComebackDestination.HOME_COMPLETE_HABIT) {
+                        welcomeBackState.suggestedHabit?.let { habitViewModel.toggleHabitCompletion(it.id) }
+                    }
+                    reEngagementViewModel.onPrimaryAction()
+                },
+                onDismiss = { reEngagementViewModel.onDismiss() },
+                onShown = { reEngagementViewModel.onWelcomeBackShown() },
+            )
+        }
     }
 }
 
@@ -512,6 +677,7 @@ private fun MainShell(
     challengeViewModel: ChallengeViewModel,
     friendsViewModel: FriendsViewModel,
     goalsViewModel: GoalsViewModel,
+    reEngagementViewModel: ReEngagementViewModel,
     billingViewModel: BillingViewModel,
     hasFullAccess: Boolean,
     onRequestPaywall: (PaywallTrigger) -> Unit,
@@ -547,13 +713,89 @@ private fun MainShell(
         innerNavController.navigate(route) { launchSingleTop = true }
     }
 
-    val bottomNavTabRoute = when {
-        currentRoute.startsWith("goals/") -> "goals"
-        else -> currentRoute
+    val navigateToArena: (tab: String, action: String?) -> Unit = { tab, action ->
+        val route = buildString {
+            append("arena?tab=${Uri.encode(tab)}")
+            append("&action=${Uri.encode(action.orEmpty())}")
+        }
+        innerNavController.navigate(route) {
+            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    val bottomNavTabRoute = normalizeMainTabRoute(currentRoute)
+
+    val activeGoals by goalsViewModel.activeGoals.collectAsState()
+    val creationDraft by goalsViewModel.creationDraft.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val appContext = LocalContext.current
+    val inboxUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    DisposableEffect(inboxUid) {
+        if (inboxUid.isNotBlank()) {
+            InboxLocalNotifier.start(appContext, inboxUid)
+        }
+        onDispose { InboxLocalNotifier.stop() }
+    }
+
+    LaunchedEffect(creationDraft?.returnAfterAddHabit) {
+        if (creationDraft?.returnAfterAddHabit == true) {
+            goalsViewModel.clearReturnAfterAddHabit()
+            innerNavController.navigate("goals") {
+                popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            innerNavController.navigate("goals/create") { launchSingleTop = true }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, habitViewModel.habits.size, activeGoals.size) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                reEngagementViewModel.evaluateOnForeground(
+                    habits = habitViewModel.habits.toList(),
+                    hasActiveGoals = activeGoals.isNotEmpty(),
+                )
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(reEngagementViewModel) {
+        reEngagementViewModel.pendingDestination.collect { destination ->
+            if (destination == null) return@collect
+            when (destination) {
+                ComebackDestination.GOALS -> {
+                    innerNavController.navigate("goals") {
+                        popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+                ComebackDestination.CHALLENGES -> navigateToArena("challenges", null)
+                ComebackDestination.FOCUS -> {
+                    navigateToFocus(null)
+                }
+                ComebackDestination.HOME_COMPLETE_HABIT,
+                ComebackDestination.HOME_BROWSE -> {
+                    innerNavController.navigate("home") {
+                        popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            }
+            reEngagementViewModel.consumePendingDestination()
+        }
     }
 
     var celebrationEvent by remember { mutableStateOf<GoalCelebration?>(null) }
     val weeklyGoalId by goalsViewModel.weeklyCheckInGoalId.collectAsState()
+    val maintainNudgeGoalId by goalsViewModel.maintainNudgeGoalId.collectAsState()
 
     LaunchedEffect(habitViewModel) {
         snapshotFlow { habitViewModel.habits.toList() }
@@ -593,11 +835,7 @@ private fun MainShell(
                 onNotificationLaunchConsumed()
             }
             NotificationLaunch.Duo -> {
-                innerNavController.navigate("duo") {
-                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navigateToArena("duo", null)
                 onNotificationLaunchConsumed()
             }
             null -> Unit
@@ -610,18 +848,10 @@ private fun MainShell(
         when (launch.route) {
             com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_CHALLENGES -> {
                 launch.challengeId?.let { challengeViewModel.requestOpenChallengeDetail(it) }
-                innerNavController.navigate("challenges") {
-                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navigateToArena("challenges", null)
             }
             com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_DUO -> {
-                innerNavController.navigate("duo") {
-                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navigateToArena("duo", null)
             }
             else -> {
                 innerNavController.navigate("home") {
@@ -639,11 +869,7 @@ private fun MainShell(
         when (launch.route) {
             com.saintnico.verdlyhabits.widget.WidgetNavigation.ROUTE_CHALLENGES -> {
                 launch.challengeId?.let { challengeViewModel.requestOpenChallengeDetail(it) }
-                innerNavController.navigate("challenges") {
-                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
+                navigateToArena("challenges", null)
             }
             else -> {
                 innerNavController.navigate("home") {
@@ -659,12 +885,13 @@ private fun MainShell(
     val showBottomNav = when {
         currentRoute == "stats" -> false
         currentRoute.startsWith("focus/") && currentRoute != "focus" -> false
+        currentRoute == "focus" || currentRoute == "focus_garden" -> false
         currentRoute == "goals/create" -> false
         currentRoute.startsWith("goals/detail/") -> false
         currentRoute == "profile_subscription" -> false
         currentRoute == "notifications" -> false
         currentRoute.startsWith("member_profile") -> false
-        else -> bottomNavItems.any { it.route == currentRoute }
+        else -> isMainTabRoute(currentRoute)
     }
 
     val referralViewModel: ReferralViewModel = viewModel()
@@ -685,6 +912,23 @@ private fun MainShell(
         innerNavController.navigate("notifications") { launchSingleTop = true }
     }
     val hasPaidSubscription by billingViewModel.hasPaidSubscription.collectAsState()
+    val isPro by billingViewModel.isPro.collectAsState()
+    val coinViewModel: CoinViewModel = viewModel()
+    val coinNotice by coinViewModel.notice.collectAsState()
+
+    LaunchedEffect(isPro, hasPaidSubscription) {
+        if (isPro || hasPaidSubscription) {
+            coinViewModel.grantMonthlyDripIfDue(true)
+        }
+    }
+
+    LaunchedEffect(coinNotice) {
+        coinNotice?.let { notice ->
+            onShowNotification(notice.message, !notice.isPositive, null)
+            coinViewModel.consumeNotice()
+        }
+    }
+
     var showReferralInvite by remember { mutableStateOf(false) }
     var showAnnualOffer by remember { mutableStateOf(false) }
 
@@ -737,6 +981,12 @@ private fun MainShell(
     var duoBroken by remember { mutableStateOf<com.saintnico.verdlyhabits.data.remote.firestore.DuoStreakBroken?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    LaunchedEffect(Unit) {
+        if (ChallengeInviteManager.peekPendingJoin(context) != null) {
+            navigateToArena("challenges", null)
+        }
+    }
+
     LaunchedEffect(accountabilityViewModel) {
         accountabilityViewModel.milestoneEvent.collect { duoMilestone = it }
     }
@@ -745,13 +995,11 @@ private fun MainShell(
     }
 
     val duoNeedsAttention = duoState.needsDuoAttention()
-    val navigateToDuo: () -> Unit = {
-        innerNavController.navigate("duo") {
-            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
+    var showCreateSheet by remember { mutableStateOf(false) }
+    val createHaptics = rememberAppHaptics()
+
+    BackHandler(enabled = showCreateSheet) { showCreateSheet = false }
+    val navigateToDuo: () -> Unit = { navigateToArena("duo", null) }
 
     LaunchedEffect(habitViewModel, accountabilityViewModel) {
         snapshotFlow { habitViewModel.habits.toList() }
@@ -772,12 +1020,17 @@ private fun MainShell(
                 VerdlyBottomNavBar(
                     currentRoute = bottomNavTabRoute,
                     onNavigate = { route ->
-                        innerNavController.navigate(route) {
-                            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
+                        showCreateSheet = false
+                        when (route) {
+                            "arena" -> navigateToArena("auto", null)
+                            else -> innerNavController.navigate(route) {
+                                popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
                     },
+                    onCreateClick = { showCreateSheet = true },
                     duoGlowing = duoNeedsAttention,
                     duoAtRisk = duoState?.streakAtRisk == true,
                 )
@@ -808,11 +1061,7 @@ private fun MainShell(
                     },
                     onNavigateToChallenge = { challengeId ->
                         challengeViewModel.requestOpenChallengeDetail(challengeId)
-                        innerNavController.navigate("challenges") {
-                            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToArena("challenges", null)
                     },
                     onShowNotification = onShowNotification,
                     goalsViewModel = goalsViewModel,
@@ -830,7 +1079,7 @@ private fun MainShell(
                     userFavoritePlant = userFavoritePlant,
                     referralState = referralState,
                     onOpenReferral = {
-                        referralViewModel.ensureReady()
+                        referralViewModel.ensureReady(hasPaidSubscription)
                         showReferralInvite = true
                     },
                     onDismissReferralBanner = { referralViewModel.dismissBanner() },
@@ -842,41 +1091,12 @@ private fun MainShell(
                 )
             }
             composable("duo") {
-                com.saintnico.verdlyhabits.ui.screens.duo.DuoScreen(
-                    duoState = duoState,
-                    friendsViewModel = friendsViewModel,
-                    myUsername = userUsername,
-                    myPhotoUrl = userPhotoUri,
-                    hasDuoBuddy = duoState?.status == "active" || duoState?.status == "pending",
-                    onAcceptInvite = { accountabilityViewModel.acceptInvite(it) },
-                    onDeclineInvite = { accountabilityViewModel.declineInvite(it) },
-                    onApplyGrace = { pairId ->
-                        accountabilityViewModel.applyGrace(pairId) { ok, err ->
-                            onShowNotification(
-                                if (ok) "Pro shield applied — yesterday forgiven" else (err ?: "Couldn't apply shield"),
-                                !ok,
-                                null,
-                            )
-                        }
-                    },
-                    onInviteBuddy = { uid, username, photo, onResult ->
-                        accountabilityViewModel.inviteBuddy(
-                            uid = uid,
-                            username = username,
-                            photoUrl = photo,
-                            myUsername = userUsername.ifBlank { userName },
-                            myPhotoUrl = userPhotoUri,
-                            onResult = onResult,
-                        )
-                    },
-                    onNavigateToMemberProfile = navigateToMemberProfile,
-                    onShowNotification = { msg, isError -> onShowNotification(msg, isError, null) },
-                    referralState = referralState,
-                    onOpenReferral = {
-                        referralViewModel.ensureReady()
-                        showReferralInvite = true
-                    },
-                )
+                LaunchedEffect(Unit) {
+                    innerNavController.navigate("arena?tab=duo&action=") {
+                        popUpTo("duo") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             }
             composable("notifications") {
                 NotificationsHubScreen(
@@ -887,27 +1107,19 @@ private fun MainShell(
                     onNavigateToMemberProfile = navigateToMemberProfile,
                     onOpenChallenge = { challengeId ->
                         challengeViewModel.requestOpenChallengeDetail(challengeId)
-                        innerNavController.navigate("challenges") {
-                            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToArena("challenges", null)
                     },
                     onOpenRoute = { route ->
                         when (route.lowercase()) {
                             "paywall", "pro", "subscription" -> onRequestPaywall(PaywallTrigger.GoPro)
                             "referral" -> {
-                                referralViewModel.ensureReady()
+                                referralViewModel.ensureReady(hasPaidSubscription)
                                 showReferralInvite = true
                             }
-                            "duo" -> navigateToDuo()
-                            "challenges", "arena" -> {
-                                innerNavController.navigate("challenges") {
-                                    popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
+                            "duo" -> navigateToArena("duo", null)
+                            "challenges", "arena" -> navigateToArena("challenges", null)
+                            "notifications" -> navigateToNotifications()
+                            else -> navigateToNotifications()
                         }
                     },
                     onShowToast = { msg, isError -> onShowNotification(msg, isError, null) },
@@ -967,12 +1179,74 @@ private fun MainShell(
                 PlantGardenScreen(onBack = { innerNavController.popBackStack() })
             }
             composable("challenges") {
-                ChallengeScreen(
-                    viewModel = challengeViewModel,
+                LaunchedEffect(Unit) {
+                    innerNavController.navigate("arena?tab=challenges&action=") {
+                        popUpTo("challenges") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+            composable(
+                route = "arena?tab={tab}&action={action}",
+                arguments = listOf(
+                    navArgument("tab") {
+                        type = NavType.StringType
+                        defaultValue = "auto"
+                    },
+                    navArgument("action") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { entry ->
+                val tab = entry.arguments?.getString("tab").orEmpty()
+                val action = entry.arguments?.getString("action").orEmpty()
+                val challengeState by challengeViewModel.state.collectAsState()
+                val hasActiveChallenges = challengeState.challenges.any { it.isEffectivelyActive() }
+                val initialSegment = when (tab) {
+                    "duo" -> ArenaSegment.Duo
+                    "challenges" -> ArenaSegment.Challenges
+                    else -> if (hasActiveChallenges) ArenaSegment.Challenges else ArenaSegment.Duo
+                }
+                ArenaScreen(
+                    initialSegment = initialSegment,
+                    duoState = duoState,
+                    hasActiveChallenges = hasActiveChallenges,
+                    challengeViewModel = challengeViewModel,
+                    billingViewModel = billingViewModel,
+                    friendsViewModel = friendsViewModel,
+                    myUsername = userUsername,
+                    myPhotoUrl = userPhotoUri,
                     onShowNotification = { msg, isError -> onShowNotification(msg, isError, null) },
                     onNavigateToEditProfile = onNavigateToEditProfile,
                     onNavigateToMemberProfile = navigateToMemberProfile,
-                    friendsViewModel = friendsViewModel,
+                    onAcceptInvite = { accountabilityViewModel.acceptInvite(it) },
+                    onDeclineInvite = { accountabilityViewModel.declineInvite(it) },
+                    onApplyGrace = { pairId ->
+                        accountabilityViewModel.applyGrace(pairId) { ok, err ->
+                            onShowNotification(
+                                if (ok) "Pro shield applied — yesterday forgiven" else (err ?: "Couldn't apply shield"),
+                                !ok,
+                                null,
+                            )
+                        }
+                    },
+                    onInviteBuddy = { uid, username, photo, onResult ->
+                        accountabilityViewModel.inviteBuddy(
+                            uid = uid,
+                            username = username,
+                            photoUrl = photo,
+                            myUsername = userUsername.ifBlank { userName },
+                            myPhotoUrl = userPhotoUri,
+                            onResult = onResult,
+                        )
+                    },
+                    referralState = referralState,
+                    onOpenReferral = {
+                        referralViewModel.ensureReady(hasPaidSubscription)
+                        showReferralInvite = true
+                    },
+                    openDuoNudge = action == "nudge",
                 )
             }
             composable("goals") {
@@ -980,6 +1254,9 @@ private fun MainShell(
                     viewModel = goalsViewModel,
                     habits = habitViewModel.habits.toList(),
                     onNavigateToAddGoal = {
+                        innerNavController.navigate("goals/create") { launchSingleTop = true }
+                    },
+                    onNavigateToContinueGoal = {
                         innerNavController.navigate("goals/create") { launchSingleTop = true }
                     },
                     onNavigateToGoalDetail = { goalId ->
@@ -990,25 +1267,45 @@ private fun MainShell(
                 )
             }
             composable("goals/create") {
+                val savedDraft by goalsViewModel.creationDraft.collectAsState()
                 GoalCreationScreen(
                     habits = habitViewModel.habits.toList(),
+                    savedDraft = savedDraft,
                     onBack = { innerNavController.popBackStack() },
                     onNavigateToAddHabit = onNavigateToAddHabit,
+                    onPersistDraft = { state, step, returnAfterAddHabit ->
+                        goalsViewModel.persistCreationDraft(state, step, returnAfterAddHabit)
+                    },
+                    onClearDraft = { goalsViewModel.clearCreationDraft() },
                     onSaveGoal = { state ->
                         val type = state.goalType ?: GoalType.BUILD
-                        val targetVal =
-                            if (type == GoalType.REACH) state.targetValue.toFloatOrNull() else null
-                        val unit = if (type == GoalType.REACH) state.unit.trim() else ""
+                        val softReview = if (type == GoalType.BUILD && state.softReviewEnabled) {
+                            state.startDate + 56L * 24 * 60 * 60 * 1000
+                        } else null
                         goalsViewModel.saveGoal(
                             title = state.title.trim().ifEmpty { "My goal" },
                             whyStatement = state.whyStatement.trim(),
                             goalType = type,
-                            targetValue = targetVal,
-                            unit = unit,
+                            targetValue = if (type == GoalType.REACH) state.targetValue.toFloatOrNull() else null,
+                            unit = if (type == GoalType.REACH) state.unit.trim() else "",
                             startDate = state.startDate,
                             targetDate = state.targetDate,
                             linkedHabitIds = state.linkedHabitIds.toList(),
-                            colorHex = state.colorHex
+                            colorHex = state.colorHex,
+                            tinyVersionText = state.tinyVersionText,
+                            anchorCue = state.anchorCue,
+                            softReviewDate = softReview,
+                            paceProfile = if (type == GoalType.REACH) state.paceProfile else null,
+                            triggerText = state.triggerText,
+                            replacementText = state.replacementText,
+                            costPerOccurrence = if (type == GoalType.QUIT && state.trackCost) {
+                                state.costPerOccurrence.toFloatOrNull()
+                            } else null,
+                            costUnit = if (type == GoalType.QUIT && state.trackCost) state.costUnit else null,
+                            floorCount = if (type == GoalType.MAINTAIN) state.floorCount.toIntOrNull() else null,
+                            floorPeriodDays = if (type == GoalType.MAINTAIN) {
+                                state.floorPeriodDays.toIntOrNull() ?: 7
+                            } else null,
                         )
                         innerNavController.popBackStack()
                         onShowNotification("Goal created", false, null)
@@ -1024,14 +1321,20 @@ private fun MainShell(
                 GoalDetailScreen(
                     goalId = decodedId,
                     viewModel = goalsViewModel,
+                    habits = habitViewModel.habits.toList(),
                     onBack = { innerNavController.popBackStack() }
                 )
             }
             composable("profile") {
                 val challengeState by challengeViewModel.state.collectAsState()
                 val friendSummaries by friendsViewModel.friendSummaries.collectAsState()
+                val profileSocialViewModel: ProfileSocialViewModel = viewModel()
+                val weeklyProfileViews by profileSocialViewModel.weeklyFriendViews.collectAsState()
                 val equippedTitleId by settingsViewModel.equippedTitleId.collectAsState()
                 val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+                LaunchedEffect(friendSummaries, uid) {
+                    profileSocialViewModel.refreshWeeklyViews(friendSummaries.map { it.uid }.toSet())
+                }
                 val allUserChallenges = remember(challengeState.challenges, challengeState.archivedChallenges, uid) {
                     (challengeState.challenges + challengeState.archivedChallenges)
                         .distinctBy { it.id }
@@ -1070,29 +1373,24 @@ private fun MainShell(
                     friendSummaries = friendSummaries,
                     duoState = duoState,
                     referralState = referralState,
-                    weeklyProfileViews = 0,
+                    weeklyProfileViews = weeklyProfileViews,
                     hasPerfectWeek = hasPerfectWeek,
                     onNavigateToEditProfile = onNavigateToEditProfile,
                     onNavigateToSettings = onNavigateToSettings,
                     onNavigateToAchievements = onNavigateToAchievements,
                     onNavigateToMemberProfile = navigateToMemberProfile,
                     onNavigateToChallenges = {
-                        innerNavController.navigate("challenges") {
-                            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToArena("challenges", null)
+                    },
+                    onNavigateToFocusGarden = {
+                        innerNavController.navigate("focus_garden") { launchSingleTop = true }
                     },
                     onNavigateToSubscription = {
                         innerNavController.navigate("profile_subscription")
                     },
                     onOpenChallengeDetail = { challengeId ->
                         challengeViewModel.requestOpenChallengeDetail(challengeId)
-                        innerNavController.navigate("challenges") {
-                            popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+                        navigateToArena("challenges", null)
                     },
                     onShowNotification = { msg, isError -> onShowNotification(msg, isError, null) },
                     onLogout = onLogout,
@@ -1169,25 +1467,80 @@ private fun MainShell(
         }
     }
 
+    maintainNudgeGoalId?.let { nudgeGoalId ->
+        val goal by goalsViewModel.goalById(nudgeGoalId).collectAsState(initial = null)
+        goal?.let { g ->
+            MaintainNudgeSheet(
+                goal = g,
+                onDismiss = { goalsViewModel.dismissMaintainNudge() },
+                onOpenGoal = {
+                    goalsViewModel.dismissMaintainNudge()
+                    innerNavController.navigate("goals/detail/${Uri.encode(g.id)}") {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+    }
+
     when (val event = celebrationEvent) {
         is GoalCelebration.Milestone -> {
             val goal by goalsViewModel.goalById(event.goalId).collectAsState(initial = null)
             val milestones by goalsViewModel.milestonesForGoal(event.goalId).collectAsState(initial = emptyList())
             val milestone = milestones.find { it.id == event.milestoneId }
+            val habitsSnapshot = habitViewModel.habits.toList()
+            val metrics = goal?.let { goalsViewModel.metricsFor(it, habitsSnapshot) }
             if (goal != null && milestone != null) {
-                MilestoneCelebrationScreen(
-                    goal = goal!!,
-                    milestone = milestone,
-                    onDismiss = { celebrationEvent = null },
-                    onShare = { celebrationEvent = null },
-                )
+                val shareMilestone = {
+                    val g = goal!!
+                    val m = milestone!!
+                    val cheer = GoalCelebrationCopy.milestoneCheer(g, m)
+                    val linked = GoalProgressEngine.linkedHabits(g, habitsSnapshot)
+                    val habitReps = linked.sumOf { it.completedDates.size }
+                    shareGoalMilestoneCard(
+                        context = context,
+                        goal = g,
+                        milestone = m,
+                        metrics = metrics,
+                        cheerLine = cheer,
+                        habitReps = habitReps,
+                    )
+                    celebrationEvent = null
+                }
+                if (event.isRitual) {
+                    GoalMomentRitualScreen(
+                        goal = goal!!,
+                        milestone = milestone,
+                        metrics = metrics,
+                        onDismiss = { celebrationEvent = null },
+                        onShare = shareMilestone,
+                    )
+                } else {
+                    MilestoneCelebrationScreen(
+                        goal = goal!!,
+                        milestone = milestone,
+                        metrics = metrics,
+                        onDismiss = { celebrationEvent = null },
+                        onShare = shareMilestone,
+                    )
+                }
             }
         }
         is GoalCelebration.Completed -> {
             val goal by goalsViewModel.goalById(event.goalId).collectAsState(initial = null)
+            var stats by remember(event.goalId) {
+                mutableStateOf<com.saintnico.verdlyhabits.ui.viewmodel.GoalCompletionStats?>(null)
+            }
+            LaunchedEffect(event.goalId, habitViewModel.habits.size) {
+                stats = goalsViewModel.completionStatsFor(
+                    event.goalId,
+                    habitViewModel.habits.toList(),
+                )
+            }
             goal?.let { g ->
                 GoalCompletionScreen(
                     goal = g,
+                    stats = stats,
                     onArchive = {
                         goalsViewModel.archiveGoal(g.id)
                         celebrationEvent = null
@@ -1196,9 +1549,7 @@ private fun MainShell(
                         celebrationEvent = null
                         innerNavController.navigate("goals/create") { launchSingleTop = true }
                     },
-                    onShare = {
-                        onShowNotification("Share your win — invite friends with your link", false, null)
-                    },
+                    onShare = { /* share handled inside GoalCompletionScreen */ },
                 )
             }
         }
@@ -1237,6 +1588,41 @@ private fun MainShell(
         }
     }
 
+    statsState.newlyUnlocked?.let { achievement ->
+        TrophyUnlockCeremony(
+            achievement = achievement,
+            haptics = AppAudio.haptics(context),
+            sound = AppAudio.sound(context),
+            onDismiss = { userStatsViewModel.clearNewlyUnlocked() },
+            onShare = { shareAchievementCard(context, achievement) },
+        )
+    }
+
+    CreateSheet(
+        visible = showCreateSheet,
+        currentTabRoute = bottomNavTabRoute,
+        haptics = createHaptics,
+        onDismiss = { showCreateSheet = false },
+        onAction = { action ->
+            when (action) {
+                CreateAction.AddHabit -> onNavigateToAddHabit()
+                CreateAction.NewGoal -> {
+                    innerNavController.navigate("goals") {
+                        popUpTo(innerNavController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                    innerNavController.navigate("goals/create") { launchSingleTop = true }
+                }
+                CreateAction.CreateChallenge -> {
+                    challengeViewModel.requestOpenCreate()
+                    navigateToArena("challenges", null)
+                }
+                CreateAction.StartFocus -> navigateToFocus(null)
+            }
+        },
+    )
+
     ReferralShareSheet(
         visible = showReferralInvite,
         state = referralState,
@@ -1260,6 +1646,22 @@ private fun MainShell(
             showAnnualOffer = false
             referralViewModel.dismissAnnualOffer()
         },
+    )
+
+    com.saintnico.verdlyhabits.ui.components.StreakRepairPromptHost(
+        visible = (currentRoute == "arena" || currentRoute.startsWith("arena") ||
+            currentRoute == "challenges" || currentRoute == "duo") &&
+            habitViewModel.habits.isNotEmpty(),
+        habits = habitViewModel.habits.toList(),
+        onUseShield = { habitId, missedDate, onResult ->
+            habitViewModel.repairWithShield(habitId, missedDate) { ok ->
+                if (ok) {
+                    onShowNotification("Streak shield used — run preserved", false, null)
+                }
+                onResult(ok)
+            }
+        },
+        onRequestPaywall = { onRequestPaywall(PaywallTrigger.StreakRepairableNoShield) },
     )
     }
 }

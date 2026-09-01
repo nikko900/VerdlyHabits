@@ -24,6 +24,8 @@ suspend fun prepareSignedInSession(
     runCatching { UserRepository().ensureUserDocument() }
     habitViewModel.restoreFromFirestore()
     userStatsViewModel.restoreFromFirestore()
+    GoalsSyncCoordinator.restoreNow(context)
+    GoalsSyncCoordinator.backupNow(context)
     runCatching { settingsViewModel.pullProfileFromCloud() }
     withContext(Dispatchers.IO) {
         WidgetSnapshotWriter.refreshHabitsFromLocalStore(context)

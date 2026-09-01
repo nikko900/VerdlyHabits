@@ -210,7 +210,9 @@ fun NotificationsHubScreen(
                                 },
                                 onOpenChallenge = {
                                     notificationsViewModel.markRead(item.id)
-                                    item.challengeId?.let(onOpenChallenge)
+                                    val chId = item.challengeId
+                                    if (!chId.isNullOrBlank()) onOpenChallenge(chId)
+                                    else onOpenRoute("arena")
                                 },
                                 onOpenRoute = { route ->
                                     notificationsViewModel.markRead(item.id)
@@ -291,7 +293,21 @@ private fun NotificationCard(
         ),
         onClick = {
             when (item.type) {
-                InboxNotificationType.CHALLENGE_UPDATE -> onOpenChallenge()
+                InboxNotificationType.CHALLENGE_UPDATE -> {
+                    onMarkRead()
+                    onOpenChallenge()
+                }
+                InboxNotificationType.NUDGE -> {
+                    onMarkRead()
+                    when (item.route?.lowercase()) {
+                        "arena" -> {
+                            if (!item.challengeId.isNullOrBlank()) onOpenChallenge()
+                            else onOpenRoute("arena")
+                        }
+                        else -> onOpenRoute(item.route ?: "notifications")
+                    }
+                }
+                InboxNotificationType.ARENA_INVITE -> onOpenProfile()
                 InboxNotificationType.SYSTEM -> {
                     val route = item.route?.takeIf { it.isNotBlank() }
                     if (route != null) onOpenRoute(route) else onMarkRead()
