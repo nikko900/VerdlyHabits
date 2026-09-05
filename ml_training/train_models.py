@@ -12,7 +12,7 @@ def create_smart_nudge_model(csv_path=None):
     if csv_path and os.path.exists(csv_path):
         print(f"Loading real data for Smart Nudge Model from {csv_path}...")
         df = pd.read_csv(csv_path)
-        # TODO: Adjust column names to match your Kaggle dataset!
+        
         X_train = df[['timeOfDay', 'dayOfWeek', 'activityState', 'timeSinceLastCompletion']].values.astype(np.float32)
         y_train = df['didEngage'].values.astype(np.float32)
     else:
@@ -24,7 +24,7 @@ def create_smart_nudge_model(csv_path=None):
     model = keras.Sequential([
         keras.layers.Dense(8, activation='relu', input_shape=(4,)),
         keras.layers.Dense(4, activation='relu'),
-        keras.layers.Dense(1, activation='sigmoid') # Sigmoid ensures output is 0-1
+        keras.layers.Dense(1, activation='sigmoid') 
     ])
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train, y_train, epochs=5, verbose=0)
@@ -39,7 +39,7 @@ def create_relapse_prediction_model(csv_path=None):
     if csv_path and os.path.exists(csv_path):
         print(f"Loading real data for Relapse Prediction Model from {csv_path}...")
         df = pd.read_csv(csv_path)
-        # TODO: Adjust column names to match your Kaggle dataset!
+        
         X_train = df[['currentStreakLength', 'completionRatio', 'responseTime']].values.astype(np.float32)
         y_train = df['didRelapse'].values.astype(np.float32)
     else:
@@ -51,7 +51,7 @@ def create_relapse_prediction_model(csv_path=None):
     model = keras.Sequential([
         keras.layers.Dense(8, activation='relu', input_shape=(3,)),
         keras.layers.Dense(4, activation='relu'),
-        keras.layers.Dense(1, activation='sigmoid') # Sigmoid ensures output is 0-1
+        keras.layers.Dense(1, activation='sigmoid') 
     ])
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train, y_train, epochs=5, verbose=0)
@@ -66,21 +66,22 @@ def create_addiction_prediction_model(csv_path=None):
     if csv_path and os.path.exists(csv_path):
         print(f"Loading real data for Addiction Prediction Model from {csv_path}...")
         df = pd.read_csv(csv_path)
-        # Using exact Kaggle columns from 'algozee' dataset
-        X_train = df[['daily_screen_time_hours']].values.astype(np.float32)
-        y_train = df['addicted_label'].values.astype(np.float32)
+    
+        
+        X_train = df[['screenTimeHours']].values.astype(np.float32)
+        y_train = df['addictionLabel'].values.astype(np.float32)
     else:
         print("Generating synthetic data for Addiction Prediction Model...")
-        # 1000 samples of screen time between 0 and 12 hours
+    
         X_train = (np.random.rand(1000, 1) * 12).astype(np.float32)
-        # If screen time > 6 hours, score is closer to 1
+        
         y_train = np.where(X_train[:, 0] > 6.0, 0.8, 0.2).astype(np.float32)
 
     print("Building and training Addiction Prediction Model...")
     model = keras.Sequential([
         keras.layers.Dense(8, activation='relu', input_shape=(1,)),
         keras.layers.Dense(4, activation='relu'),
-        keras.layers.Dense(1, activation='sigmoid') # Sigmoid ensures output is 0-1
+        keras.layers.Dense(1, activation='sigmoid')
     ])
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train, y_train, epochs=5, verbose=0)
@@ -101,7 +102,7 @@ def export_to_tflite(model, output_path):
 if __name__ == "__main__":
     assets_dir = "../app/src/main/assets"
     
-    # TIP: When you download a dataset, put it in this folder and change these paths!
+
     nudge_csv = "nudge_dataset.csv"
     relapse_csv = "relapse_dataset.csv"
     
@@ -111,18 +112,15 @@ if __name__ == "__main__":
     
     print("-" * 30)
     
-    # 2. Relapse Prediction Model
+    # Relapse Prediction Model
     relapse_model = create_relapse_prediction_model(csv_path=relapse_csv)
     export_to_tflite(relapse_model, os.path.join(assets_dir, "relapse_prediction_model.tflite"))
     
     print("-" * 30)
     
-    # 3. Addiction Prediction Model
-    # Pointing exactly to the Kaggle notebook path you provided
-    addiction_csv = "/kaggle/input/datasets/algozee/smartphone-addiction-prediction-data/Smartphone_Usage_And_Addiction_Analysis_7500_Rows (1).csv"
+   # Addiction Prediction Model
+    addiction_csv = "addiction_dataset.csv"
     addiction_model = create_addiction_prediction_model(csv_path=addiction_csv)
-    
-    # Export it (might export to Kaggle working directory depending on where you run this)
     export_to_tflite(addiction_model, os.path.join(assets_dir, "addiction_prediction_model.tflite"))
     
     print("Successfully trained and exported all models to the Android assets directory!")

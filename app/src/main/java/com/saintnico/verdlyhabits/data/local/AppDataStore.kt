@@ -42,6 +42,8 @@ class AppDataStore(private val context: Context) {
         val AMBIENT_LAST_USED = stringPreferencesKey("ambient_last_used")
         val TRIAL_PILL_DISMISSED_DAY = stringPreferencesKey("trial_pill_dismissed_iso_day")
         val PRO_DEBUG_ENABLED = booleanPreferencesKey("pro_debug_enabled")
+        val CHURN_PROBABILITY = floatPreferencesKey("churn_probability")
+        val NUDGE_PROBABILITY = floatPreferencesKey("nudge_probability")
     }
 
     // ── Mood ──────────────────────────────────────────────────────────────
@@ -255,5 +257,17 @@ class AppDataStore(private val context: Context) {
             prefs[TOTAL_FOCUS_MINUTES] = focus
             prefs[ACHIEVEMENTS_JSON] = achievements
         }
+    }
+
+    // ── AI Micro-Habit ────────────────────────────────────────────────────
+    val churnProbability: Flow<Float> = context.appDataStore.data.map { it[CHURN_PROBABILITY] ?: 0f }
+    val nudgeProbability: Flow<Float> = context.appDataStore.data.map { it[NUDGE_PROBABILITY] ?: 0f }
+
+    suspend fun setChurnProbability(prob: Float) {
+        context.appDataStore.edit { it[CHURN_PROBABILITY] = prob }
+    }
+
+    suspend fun setNudgeProbability(prob: Float) {
+        context.appDataStore.edit { it[NUDGE_PROBABILITY] = prob }
     }
 }

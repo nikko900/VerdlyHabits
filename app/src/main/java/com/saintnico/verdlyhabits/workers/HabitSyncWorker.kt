@@ -4,8 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.saintnico.verdlyhabits.data.DigitalHabitTracker
-import com.saintnico.verdlyhabits.data.HealthConnectManager
+import com.saintnico.verdlyhabits.sensors.DigitalHabitTracker
+import com.saintnico.verdlyhabits.sensors.HealthConnectManager
+import com.saintnico.verdlyhabits.ml.AddictionPredictionEngine
 import com.saintnico.verdlyhabits.ml.RelapsePredictionEngine
 import com.saintnico.verdlyhabits.ml.SmartNudgeEngine
 import com.saintnico.verdlyhabits.data.local.AppDataStore
@@ -25,6 +26,7 @@ class HabitSyncWorker(
         val digitalHabitTracker = DigitalHabitTracker(context)
         val smartNudgeEngine = SmartNudgeEngine(context)
         val relapsePredictionEngine = RelapsePredictionEngine(context)
+        val addictionPredictionEngine = AddictionPredictionEngine(context)
         val appDataStore = AppDataStore(context)
 
         try {
@@ -42,8 +44,9 @@ class HabitSyncWorker(
 
             // 2. Track Digital Habits (UsageStats)
             // Note: UsageStats requires PACKAGE_USAGE_STATS permission
+            var screenTimeMillis = 0L
             try {
-                val screenTimeMillis = digitalHabitTracker.getTotalScreenTimeMillis()
+                screenTimeMillis = digitalHabitTracker.getTotalScreenTimeMillis()
                 Log.d("HabitSyncWorker", "Total Screen Time today: ${screenTimeMillis / 1000 / 60} minutes")
             } catch (e: Exception) {
                 Log.e("HabitSyncWorker", "Could not access usage stats: ${e.message}")
@@ -64,6 +67,10 @@ class HabitSyncWorker(
                 responseTime = 120.0f
             )
             Log.d("HabitSyncWorker", "Relapse Prediction Churn Probability: $churnProb")
+
+            val screenTimeHours = screenTimeMillis / (1000f * 60f * 60f)
+            val addictionScore = addictionPredictionEngine.predictAddictionScore(screenTimeHours)
+            Log.d("HabitSyncWorker", "Predicted Addiction Score: $addictionScore")
 
             // Save to DataStore so UI can react
             appDataStore.setNudgeProbability(nudgeProb)
@@ -92,6 +99,7 @@ class HabitSyncWorker(
         } finally {
             smartNudgeEngine.close()
             relapsePredictionEngine.close()
+            addictionPredictionEngine.close()
         }
 
         return Result.success()

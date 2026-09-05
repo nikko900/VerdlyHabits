@@ -861,10 +861,9 @@ fun HomeScreen(
             }
         }
 
-        // Confetti overlays
+    // Confetti overlays
         CelebrationKonfetti(trigger = konfettiTrigger, intensity = BurstIntensity.NORMAL)
         CelebrationKonfetti(trigger = hugeKonfettiTrigger, intensity = BurstIntensity.HUGE)
-    }
 
     // ── Action sheet ───────────────────────────────────────────────────────
     if (selectedHabitForActions != null) {
@@ -1043,6 +1042,7 @@ fun HomeScreen(
 
     // Paywall is hosted at the navigation root (ModalBottomSheet).
     }
+}
 }
 
 // ── Sub-composables ──────────────────────────────────────────────────────────
