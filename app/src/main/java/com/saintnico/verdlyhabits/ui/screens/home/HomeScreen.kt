@@ -716,7 +716,53 @@ fun HomeScreen(
                     }
                 }
 
+                // ── AI Micro-Habit Suggestion ──────────────────────────────
+                if (visibleScheduledToday.isNotEmpty() && activeFiltered.isNotEmpty()) {
+                    item {
+                        val churnProbability by store.churnProbability.collectAsState(initial = 0f)
+                        if (churnProbability > 0.8f) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.AutoAwesome,
+                                        contentDescription = "AI Suggestion",
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Column {
+                                        Text(
+                                            "Micro-Habit Suggestion",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "We noticed you might be losing momentum. Try scaling down your habit to just 1 minute today to keep the streak alive!",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ── Insight card ───────────────────────────────────────────
+
                 if (!insightDismissed && visible.isNotEmpty()) {
                     item {
                         PremiumInsightCard(
@@ -832,10 +878,9 @@ fun HomeScreen(
             }
         }
 
-        // Confetti overlays
+    // Confetti overlays
         CelebrationKonfetti(trigger = konfettiTrigger, intensity = BurstIntensity.NORMAL)
         CelebrationKonfetti(trigger = hugeKonfettiTrigger, intensity = BurstIntensity.HUGE)
-    }
 
     // ── Action sheet ───────────────────────────────────────────────────────
     if (selectedHabitForActions != null) {
@@ -1045,6 +1090,7 @@ fun HomeScreen(
     // Paywall is hosted at the navigation root (ModalBottomSheet).
     }
 }
+}
 
 // ── Sub-composables ──────────────────────────────────────────────────────────
 
@@ -1068,9 +1114,10 @@ private fun ShieldBadge(count: Int) {
 private fun ActionRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    tint: Color = LocalContentColor.current,
+    tint: Color? = null,
     onClick: () -> Unit
 ) {
+    val actualTint = tint ?: LocalContentColor.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1078,9 +1125,9 @@ private fun ActionRow(
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, modifier = Modifier.size(22.dp), tint = tint)
+        Icon(icon, null, modifier = Modifier.size(22.dp), tint = actualTint)
         Spacer(Modifier.width(16.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = tint)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = actualTint)
     }
 }
 

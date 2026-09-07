@@ -24,9 +24,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.saintnico.verdlyhabits" />
-                  <option name="mobileSdkAppId" value="1:781423728000:android:5cd9b0fbc6b9de49f95d65" />
-                  <option name="projectId" value="rootine-7c95d" />
-                  <option name="projectNumber" value="781423728000" />
+                  <option name="mobileSdkAppId" value="1:1234567890:android:abcdef1234567890" />
+                  <option name="projectId" value="dummy-project-id" />
+                  <option name="projectNumber" value="1234567890" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

@@ -81,4 +81,5 @@
     <string name="widget_leaderboard_live_badge">LIVE ARENA</string>
     <string name="widget_leaderboard_hero_subtitle">Streak leaderboard · updates with your challenge</string>
     <string name="widget_leaderboard_brand">VERDLY · Tap to compete</string>
+    <string name="default_web_client_id" />
 </resources>
