@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_today">Today</string>
+    <string name="nav_arena">Arena</string>
+    <string name="nav_goals">Goals</string>
+    <string name="nav_profile">Profile</string>
+    <string name="create">Create</string>
+    <string name="close_create">Close create</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="save">Save</string>
+    <string name="open">Open</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+    <string name="back">Back</string>
+    <string name="settings">Settings</string>
+    <string name="view_profile">View profile</string>
+    <string name="made_by_nico">Made by Nico</string>
+    <string name="appearance_dark">Dark</string>
+    <string name="appearance_light">Light</string>
+    <string name="appearance_system">System</string>
+    <string name="sound_on">on</string>
+    <string name="sound_off">off</string>
+    <string name="sound_dot">Sound %s</string>
+
+    <string name="settings_controls">Controls</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notifications_on">Push, reminders, social</string>
+    <string name="settings_notifications_off">Off</string>
+    <string name="settings_appearance">Appearance &amp; feel</string>
+    <string name="settings_habits">Habits &amp; reminders</string>
+    <string name="settings_habits_sub">Daily reminders, goal check-ins</string>
+    <string name="settings_focus">Focus &amp; widgets</string>
+    <string name="settings_focus_sub">Ambient sound, home screen widget</string>
+    <string name="settings_social">Social &amp; Grove privacy</string>
+    <string name="settings_social_sub">Who sees your proof, blocks, reports</string>
+    <string name="settings_activity">Activity</string>
+    <string name="settings_activity_sub">Last active on grove and profiles</string>
+    <string name="activity_show_last_active">Show last active</string>
+    <string name="activity_show_last_active_on">Friends see when you were last in the grove. You also see theirs.</string>
+    <string name="activity_show_last_active_off">Hidden. You will not see anyone else\'s last active either.</string>
+    <string name="settings_duo">Duo &amp; Arena</string>
+    <string name="settings_duo_sub">Preferences. Most coming soon</string>
+    <string name="settings_sub_coins">Subscription &amp; coins</string>
+    <string name="settings_sub_coins_sub">Premium · Manage · Restore</string>
+    <string name="settings_data">Data &amp; storage</string>
+    <string name="settings_data_sub">Export, clear cache, reset</string>
+    <string name="settings_help">Help &amp; legal</string>
+    <string name="settings_help_sub">Rate, privacy policy, about</string>
+    <string name="settings_account">Account actions</string>
+    <string name="settings_account_sub">Log out</string>
+
+    <string name="notif_push">Push notifications</string>
+    <string name="notif_push_sub">Master switch for alerts on this device</string>
+    <string name="notif_habit">Habit reminders</string>
+    <string name="notif_habit_sub">Alarms for habits you\'ve scheduled</string>
+    <string name="notif_goal">Goal &amp; check-in reminders</string>
+    <string name="notif_goal_sub">Daily motivation and Sunday check-in</string>
+    <string name="notif_social">Social &amp; nudges</string>
+    <string name="notif_social_sub">Friend activity and nudges received</string>
+    <string name="notif_duo">Duo &amp; Arena activity</string>
+    <string name="notif_duo_sub">Buddy and challenge updates</string>
+    <string name="notif_streak">Streak risk alerts</string>
+    <string name="notif_streak_sub">Warn before a streak breaks</string>
+    <string name="notif_history">View notification history</string>
+    <string name="notif_history_sub">Inbox of past alerts</string>
+
+    <string name="appear_system">Match system</string>
+    <string name="appear_system_sub">Follow your phone light or dark setting</string>
+    <string name="appear_light">Light mode</string>
+    <string name="appear_light_sub">Bright grove from the first screen</string>
+    <string name="appear_dark">Dark mode</string>
+    <string name="appear_dark_sub">Keep the grove dim after dusk</string>
+    <string name="appear_sound">Sound effects</string>
+    <string name="appear_sound_sub">Completion chimes &amp; milestone tones</string>
+    <string name="appear_haptics">Haptics</string>
+    <string name="appear_haptics_sub">Vibration on completions and alerts</string>
+    <string name="lang_english">English</string>
+    <string name="lang_spanish">Español</string>
+    <string name="lang_german">Deutsch</string>
+    <string name="lang_swahili">Kiswahili</string>
+
+    <string name="habit_daily_reminder">Daily habit reminder</string>
+    <string name="goal_daily_reminder">Goal daily reminder</string>
+    <string name="goal_daily_reminder_sub">Motivation ping at %s</string>
+    <string name="daily_reminder_time">Daily reminder time</string>
+    <string name="weekly_goal_checkin">Weekly goal check-in</string>
+    <string name="weekly_goal_checkin_sub">Sunday evening recap</string>
+    <string name="reminder_time">Reminder time</string>
+
+    <string name="resume_focus">Resume last Focus session</string>
+    <string name="ambient_default">Ambient sound default</string>
+    <string name="ambient_sound">Ambient sound</string>
+    <string name="add_widget">Add home screen widget</string>
+    <string name="add_widget_sub">Pin today\'s habits to your home screen</string>
+
+    <string name="show_recent_proof">Show recent proof on profile</string>
+    <string name="open_grove_visibility">Open Grove visibility</string>
+    <string name="open_grove_standing">Open Grove standing</string>
+    <string name="who_can_nudge">Who can nudge me</string>
+    <string name="who_can_nudge_sub">Friends and grove members</string>
+    <string name="blocked_users">Blocked users</string>
+    <string name="your_reports">Your reports</string>
+    <string name="your_reports_sub">Reports you\'ve submitted</string>
+
+    <string name="duo_activity_notif">Duo activity notifications</string>
+    <string name="auto_join_challenges">Auto-join open challenges</string>
+    <string name="leave_current_duo">Leave current duo</string>
+
+    <string name="premium_status">Premium status</string>
+    <string name="manage_subscription">Manage subscription</string>
+    <string name="manage_subscription_sub">Plans, trial, and Play Store billing</string>
+    <string name="restore_purchases">Restore purchases</string>
+    <string name="restore_purchases_sub">Sync from Google Play</string>
+    <string name="coin_balance">Coin balance</string>
+    <string name="coin_balance_sub">%d coins</string>
+
+    <string name="export_data">Export my data</string>
+    <string name="clear_image_cache">Clear image cache</string>
+    <string name="reset_all_progress">Reset all progress</string>
+    <string name="reset_all_progress_sub">Wipe habits, levels, and cloud data</string>
+    <string name="reset_everything">Reset Everything?</string>
+    <string name="reset_everything_body">This permanently deletes your habits, levels, streaks, and cloud profile. It cannot be undone.</string>
+    <string name="delete_everything">Delete Everything</string>
+
+    <string name="terms_of_service">Terms of service</string>
+    <string name="help_support">Help &amp; support</string>
+    <string name="send_feedback">Send feedback</string>
+    <string name="version_line">Version %1$s (%2$d)</string>
+
+    <string name="log_out">Log out</string>
+    <string name="log_out_sub">Sign out of this device</string>
+    <string name="log_out_confirm">Log out?</string>
+    <string name="log_out_body">You\'ll need to sign in again to tend this grove.</string>
+
+    <string name="invite_friends_short">Invite %d friends</string>
+    <string name="invite_premium_days">%d days of Premium. Free</string>
+    <string name="invite_chip">Invite %1$d/%2$d</string>
+    <string name="invite_friends_grow">Invite friends. You both grow with Verdly.</string>
+
+    <string name="activity">Activity</string>
+    <string name="requests_updates">Requests &amp; updates</string>
+    <string name="mark_all_read">Mark all read</string>
+    <string name="weekly_wrapped">WEEKLY WRAPPED</string>
+    <string name="weekly_wrapped_ready">Your habit story is ready</string>
+    <string name="invite_grove">Invite someone into the grove</string>
+    <string name="today_focus">Today\'s Focus</string>
+    <string name="focus_session">Focus session</string>
+    <string name="pin_focus">Pin to Today\'s Focus</string>
+    <string name="unpin_focus">Unpin from Today\'s Focus</string>
+    <string name="resume_habit">Resume habit</string>
+
+    <string name="create_plant_or_share">Plant or share</string>
+    <string name="create_share">Share</string>
+    <string name="create_start">Start</string>
+    <string name="share_this_win">Share this win</string>
+    <string name="share_todays_plant">Share today\'s plant</string>
+    <string name="plant_something">Plant something</string>
+    <string name="invite_into_grove">Invite into the grove</string>
+    <string name="start_youll_keep">Start something you\'ll keep</string>
+    <string name="nudge_someone">Nudge someone</string>
+    <string name="nudge_user">Nudge @%s</string>
+    <string name="change_plant">Change plant</string>
+    <string name="share_plant">Share plant</string>
+    <string name="open_duo">Open duo</string>
+    <string name="start_a_duo">Start a duo</string>
+    <string name="show_the_grove">Show the grove</string>
+    <string name="plant_one_first">Plant one first.</string>
+    <string name="post_proof">Post proof</string>
+    <string name="share_card">Share card</string>
+    <string name="invite">Invite</string>
+    <string name="focus">Focus</string>
+
+    <string name="cat_all">All</string>
+    <string name="cat_connections">Connections</string>
+    <string name="cat_arena">Arena</string>
+    <string name="cat_activity">Activity</string>
+</resources>

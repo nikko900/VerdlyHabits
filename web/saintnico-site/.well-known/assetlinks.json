@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.saintnico.verdlyhabits",
+      "sha256_cert_fingerprints": [
+        "F5:A1:D4:66:29:D9:C6:81:51:63:51:95:1B:FE:55:36:D3:6C:99:78:25:68:75:3E:8A:18:12:E0:FE:4D:19:19",
+        "23:8B:70:6B:16:78:21:D8:14:B3:38:61:64:A8:A0:25:E4:DE:28:BC:F7:FF:E1:3D:87:05:84:FA:6C:9F:F4:BE"
+      ]
+    }
+  }
+]
