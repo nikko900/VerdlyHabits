@@ -38,7 +38,7 @@ The APK talks to the live Verdly backend, so all features work without any setup
 
 ### Option B: Google Play
 
-Install the published app from the [Play listing](REPLACE_WITH_PLAY_URL). This is the same product, version 1.0.8.
+Install the published app from the [Play listing](https://play.google.com/store/apps/details?id=com.saintnico.verdlyhabits). This is the same product, version 1.0.8.
 
 ### Option C: build from source
 
